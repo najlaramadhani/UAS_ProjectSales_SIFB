@@ -4,6 +4,21 @@
  * Modern, responsive layout with semantic HTML
  */
 
+session_start();
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+// Handle logout
+if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+    session_destroy();
+    header('Location: login.php');
+    exit;
+}
+
 // Determine current page
 $page = isset($_GET['page']) ? trim($_GET['page']) : 'dashboard';
 $allowed_pages = ['dashboard', 'order', 'distributor', 'pengiriman', 'laporan'];

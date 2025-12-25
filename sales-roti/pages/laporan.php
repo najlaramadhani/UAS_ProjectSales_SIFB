@@ -65,7 +65,8 @@
 <!-- Top Distributors Report -->
 <div class="report-section">
     <h3>Top 10 Distributor Penjualan</h3>
-    <table class="table">
+    <div class="table-container">
+        <table class="table">
         <thead>
             <tr>
                 <th style="width: 5%;">Rank</th>
@@ -188,6 +189,7 @@
             </tr>
         </tbody>
     </table>
+    </div>
 </div>
 
 <!-- Export Options -->

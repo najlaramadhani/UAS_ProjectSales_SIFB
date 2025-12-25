@@ -817,9 +817,6 @@ body {
 }
 
 /* Navbar icon & label centering for small screens */
-.nav-item .nav-icon { display: block; width: 100%; text-align: center; }
-.nav-item .nav-label { display: block; width: 100%; text-align: center; }
-
 /* ==================== PAGINATION ==================== */
 .pagination {
     display: flex;
@@ -1235,6 +1232,27 @@ body {
         width: 100%;
     }
     
+    /* Responsive Table */
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .table {
+        font-size: 0.8rem;
+    }
+    
+    .table th {
+        padding: 0.6rem 0.5rem;
+    }
+    
+    .table td {
+        padding: 0.6rem 0.5rem;
+    }
+    
+    .progress-bar {
+        min-width: 60px;
+    }
+    
     .modal-content {
         width: 95%;
         margin: 20% auto;
@@ -1301,7 +1319,7 @@ body {
     }
     
     .nav-label {
-        display: block;
+        display: inline;
         font-size: 0.75rem;
         margin-top: 0.25rem;
     }
@@ -1313,5 +1331,20 @@ body {
     .btn-page {
         padding: 0.35rem 0.5rem;
         font-size: 0.75rem;
+    }
+    
+    /* Small Mobile Table */
+    .table {
+        font-size: 0.75rem;
+    }
+    
+    .table th,
+    .table td {
+        padding: 0.4rem 0.3rem;
+    }
+    
+    .progress-bar {
+        min-width: 50px;
+        height: 6px;
     }
 }
