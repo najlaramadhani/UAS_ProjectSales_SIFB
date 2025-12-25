@@ -117,25 +117,25 @@
         </thead>
         <tbody>
             <tr>
-                <td>ORD-2025-0156</td>
+                <td>SO202501001</td>
                 <td>24 Des 2025</td>
-                <td>PT Abadi Jaya</td>
+                <td>Holland Roti</td>
                 <td><span class="badge badge-success">Selesai</span></td>
                 <td class="action-cell">
                     <button class="btn-action btn-view">Lihat</button>
                 </td>
             </tr>
             <tr>
-                <td>ORD-2025-0155</td>
+                <td>SO202501002</td>
                 <td>24 Des 2025</td>
-                <td>CV Maju Bersama</td>
+                <td>Roti Jaya</td>
                 <td><span class="badge badge-warning">Dikirim</span></td>
                 <td class="action-cell">
                     <button class="btn-action btn-view">Lihat</button>
                 </td>
             </tr>
             <tr>
-                <td>ORD-2025-0154</td>
+                <td>SO202501001</td>
                 <td>23 Des 2025</td>
                 <td>PT Bakery Nusantara</td>
                 <td><span class="badge badge-info">Pending</span></td>

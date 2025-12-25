@@ -75,21 +75,21 @@
         <div class="summary-icon">✓</div>
         <div class="summary-content">
             <p class="summary-label">Selesai</p>
-            <p class="summary-value">89 pengiriman</p>
+            <p class="summary-value">1 pengiriman</p>
         </div>
     </div>
     <div class="summary-card">
         <div class="summary-icon">→</div>
         <div class="summary-content">
             <p class="summary-label">Dikirim</p>
-            <p class="summary-value">12 pengiriman</p>
+            <p class="summary-value">1 pengiriman</p>
         </div>
     </div>
     <div class="summary-card">
         <div class="summary-icon">⏳</div>
         <div class="summary-content">
             <p class="summary-label">Pending</p>
-            <p class="summary-value">5 pengiriman</p>
+            <p class="summary-value">0 pengiriman</p>
         </div>
     </div>
 </div>

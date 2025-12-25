@@ -29,8 +29,8 @@
         </thead>
         <tbody>
             <tr>
-                <td>1</td>
-                <td>PT Abadi Jaya</td>
+                <td>DST001</td>
+                <td>Holland Roti</td>
                 <td>Jl. Ahmad Yani No. 123, Medan</td>
                 <td>08126789012</td>
                 <td>info@abadi.com</td>
@@ -40,8 +40,8 @@
                 </td>
             </tr>
             <tr>
-                <td>2</td>
-                <td>CV Maju Bersama</td>
+                <td>DST002</td>
+                <td>Roti Jaya</td>
                 <td>Jl. Gatot Subroto No. 456, Jakarta</td>
                 <td>08123456789</td>
                 <td>contact@maju.co.id</td>
@@ -51,7 +51,7 @@
                 </td>
             </tr>
             <tr>
-                <td>3</td>
+                <td>DST003</td>
                 <td>PT Bakery Nusantara</td>
                 <td>Jl. Sudirman No. 789, Bandung</td>
                 <td>08129876543</td>
@@ -62,7 +62,7 @@
                 </td>
             </tr>
             <tr>
-                <td>4</td>
+                <td>DST004</td>
                 <td>PT Toko Segar</td>
                 <td>Jl. Diponegoro No. 321, Surabaya</td>
                 <td>08118765432</td>
