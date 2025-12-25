@@ -20,6 +20,7 @@
         <thead>
             <tr>
                 <th style="width: 15%;">No Pengiriman</th>
+                <th style="width: 15%;">No Surat Jalan</th>
                 <th style="width: 15%;">Tanggal Kirim</th>
                 <th style="width: 25%;">Alamat Pengiriman</th>
                 <th style="width: 15%;">Status</th>
@@ -28,9 +29,10 @@
         </thead>
         <tbody>
             <tr>
-                <td><strong>PGR-2025-0089</strong></td>
+                <td><strong>DO-SO202501001-01</strong></td>
+                <td>SJ-001</td>
                 <td>24 Des 2025</td>
-                <td>Jl. Ahmad Yani No. 123, Medan</td>
+                <td>Jl. Kenanga No.3, Jakarta</td>
                 <td>
                     <span class="badge badge-success">Selesai</span>
                 </td>
@@ -41,67 +43,16 @@
                 </td>
             </tr>
             <tr>
-                <td><strong>PGR-2025-0088</strong></td>
+                <td><strong>DO-SO202501001-02</strong></td>
+                <td>SJ-002</td>
                 <td>24 Des 2025</td>
-                <td>Jl. Gatot Subroto No. 456, Jakarta</td>
+                <td>Jl. Anggrek No.8, Bandung</td>
                 <td>
                     <span class="badge badge-warning">Dikirim</span>
                 </td>
                 <td class="action-cell">
                     <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0088')">Detail</button>
                     <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0088')">Edit</button>
-                    <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
-                </td>
-            </tr>
-            <tr>
-                <td><strong>PGR-2025-0087</strong></td>
-                <td>23 Des 2025</td>
-                <td>Jl. Sudirman No. 789, Bandung</td>
-                <td>
-                    <span class="badge badge-info">Pending</span>
-                </td>
-                <td class="action-cell">
-                    <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0087')">Detail</button>
-                    <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0087')">Edit</button>
-                    <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
-                </td>
-            </tr>
-            <tr>
-                <td><strong>PGR-2025-0086</strong></td>
-                <td>23 Des 2025</td>
-                <td>Jl. Diponegoro No. 321, Surabaya</td>
-                <td>
-                    <span class="badge badge-success">Selesai</span>
-                </td>
-                <td class="action-cell">
-                    <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0086')">Detail</button>
-                    <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0086')">Edit</button>
-                    <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
-                </td>
-            </tr>
-            <tr>
-                <td><strong>PGR-2025-0085</strong></td>
-                <td>22 Des 2025</td>
-                <td>Jl. Rajawali No. 654, Yogyakarta</td>
-                <td>
-                    <span class="badge badge-success">Selesai</span>
-                </td>
-                <td class="action-cell">
-                    <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0085')">Detail</button>
-                    <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0085')">Edit</button>
-                    <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
-                </td>
-            </tr>
-            <tr>
-                <td><strong>PGR-2025-0084</strong></td>
-                <td>22 Des 2025</td>
-                <td>Jl. Iswahyudi No. 987, Palembang</td>
-                <td>
-                    <span class="badge badge-warning">Dikirim</span>
-                </td>
-                <td class="action-cell">
-                    <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0084')">Detail</button>
-                    <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0084')">Edit</button>
                     <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
                 </td>
             </tr>
