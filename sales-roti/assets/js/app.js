@@ -43,6 +43,11 @@ function openModal(title, formType, id = null) {
     // Show modal with animation
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
+
+    // If detail view, fetch data after modal visible
+    if (formType === 'orderDetail' && id) {
+        setTimeout(() => { fetchAndRenderOrderDetail(id); }, 100);
+    }
 }
 
 /**
@@ -78,11 +83,6 @@ function loadFormContent(container, formType, id) {
                     <label for="distributor">Distributor</label>
                     <select id="distributor" name="distributor" required>
                         <option value="">Pilih Distributor</option>
-                        <option value="1">PT Abadi Jaya</option>
-                        <option value="2">CV Maju Bersama</option>
-                        <option value="3">PT Bakery Nusantara</option>
-                        <option value="4">PT Toko Segar</option>
-                        <option value="5">CV Berkah Makmur</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -99,9 +99,9 @@ function loadFormContent(container, formType, id) {
                     <label for="status">Status</label>
                     <select id="status" name="status" required>
                         <option value="">Pilih Status</option>
-                        <option value="pending">Pending</option>
-                        <option value="dikirim">Dikirim</option>
-                        <option value="selesai">Selesai</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Dikirim">Dikirim</option>
+                        <option value="Selesai">Selesai</option>
                     </select>
                 </div>
             `;
@@ -135,6 +135,10 @@ function loadFormContent(container, formType, id) {
                     <input type="text" id="noPengiriman" name="noPengiriman" placeholder="Auto generated" readonly>
                 </div>
                 <div class="form-group">
+                    <label for="noSuratJalan">No Surat Jalan</label>
+                    <input type="text" id="noSuratJalan" name="noSuratJalan" placeholder="Nomor surat jalan" required />
+                </div>
+                <div class="form-group">
                     <label for="tanggalKirim">Tanggal Kirim</label>
                     <input type="date" id="tanggalKirim" name="tanggalKirim" required>
                 </div>
@@ -143,29 +147,18 @@ function loadFormContent(container, formType, id) {
                     <textarea id="alamatPengiriman" name="alamatPengiriman" placeholder="Jalan, No., Kota, Provinsi" rows="3" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="namaDriver">Nama Driver</label>
-                    <input type="text" id="namaDriver" name="namaDriver" placeholder="Nama driver" required />
-                </div>
-                <div class="form-group">
-                    <label for="kontakDriver">Kontak Driver</label>
-                    <input type="text" id="kontakDriver" name="kontakDriver" placeholder="08xxxxxxxxxx" required />
-                </div>
-                <div class="form-group">
                     <label for="statusPengiriman">Status Pengiriman</label>
                     <select id="statusPengiriman" name="statusPengiriman" required>
                         <option value="">Pilih Status</option>
-                        <option value="pending">Pending</option>
-                        <option value="dikirim">Dikirim</option>
-                        <option value="selesai">Selesai</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Dikirim">Dikirim</option>
+                        <option value="Selesai">Selesai</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="noOrder">No Order Terkait</label>
-                    <select id="noOrder" name="noOrder" required>
+                    <label for="noPesanan">No Order</label>
+                    <select id="noPesanan" name="noPesanan" required>
                         <option value="">Pilih Order</option>
-                        <option value="ORD-2025-0156">ORD-2025-0156 - PT Abadi Jaya</option>
-                        <option value="ORD-2025-0155">ORD-2025-0155 - CV Maju Bersama</option>
-                        <option value="ORD-2025-0154">ORD-2025-0154 - PT Bakery Nusantara</option>
                     </select>
                 </div>
             `;
@@ -240,11 +233,168 @@ function loadFormContent(container, formType, id) {
             `;
             break;
             
+        case 'detailPesananForm':
+            formHTML = `
+                <div class="form-group">
+                    <label for="produk">Produk</label>
+                    <select id="produk" name="produk" required>
+                        <option value="">Pilih Produk</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="jumlah">Jumlah</label>
+                    <input type="number" id="jumlah" name="jumlah" placeholder="Jumlah produk" min="1" required>
+                </div>
+            `;
+            break;
+            
         default:
             formHTML = '<p>Form tidak ditemukan</p>';
     }
     
     container.innerHTML = formHTML;
+}
+
+/**
+ * Initialize product controls inside order form (add/remove rows, totals)
+ */
+function initializeProductControls() {
+    const addBtn = document.getElementById('addProductBtn');
+    const list = document.getElementById('productList');
+    if (!list) return;
+    list.innerHTML = '';
+    if (addBtn) {
+        addBtn.onclick = function() { addProductRow(); };
+    }
+    // start with one empty row
+    addProductRow();
+    updateOrderTotal();
+}
+
+function addProductRow(productId = '', qty = 1) {
+    const list = document.getElementById('productList');
+    if (!list) return;
+    const row = document.createElement('div');
+    row.className = 'product-row';
+    row.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem;';
+
+    let options = '<option value="">Pilih Produk</option>';
+    if (window.productsData && window.productsData.length) {
+        window.productsData.forEach(p => {
+            options += `<option value="${p.idProduk}" data-harga="${p.harga}">${p.namaProduk} (Rp ${parseFloat(p.harga).toLocaleString('id-ID')})</option>`;
+        });
+    }
+
+    row.innerHTML = `
+        <select class="prod-select" style="flex:1;">${options}</select>
+        <input type="number" class="prod-qty" min="1" value="${qty}" style="width:80px;" />
+        <div class="prod-total" style="width:120px; text-align:right;">Rp 0</div>
+        <button type="button" class="btn btn-outline btn-remove" style="margin-left:6px;">×</button>
+    `;
+
+    list.appendChild(row);
+
+    const sel = row.querySelector('.prod-select');
+    const qtyInput = row.querySelector('.prod-qty');
+    const totalDiv = row.querySelector('.prod-total');
+
+    sel.addEventListener('change', () => { updateRowTotal(row); updateOrderTotal(); });
+    qtyInput.addEventListener('input', () => { updateRowTotal(row); updateOrderTotal(); });
+    row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); updateOrderTotal(); });
+
+    if (productId) sel.value = productId;
+    updateRowTotal(row);
+}
+
+function updateRowTotal(row) {
+    const sel = row.querySelector('.prod-select');
+    const qty = parseInt(row.querySelector('.prod-qty').value || 0, 10);
+    const harga = sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].dataset ? parseFloat(sel.options[sel.selectedIndex].dataset.harga || 0) : 0;
+    const total = harga * qty;
+    row.querySelector('.prod-total').textContent = 'Rp ' + total.toLocaleString('id-ID');
+}
+
+function updateOrderTotal() {
+    const rows = document.querySelectorAll('.product-row');
+    let sum = 0;
+    rows.forEach(r => {
+        const sel = r.querySelector('.prod-select');
+        const qty = parseInt(r.querySelector('.prod-qty').value || 0, 10);
+        const harga = sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].dataset ? parseFloat(sel.options[sel.selectedIndex].dataset.harga || 0) : 0;
+        sum += harga * qty;
+    });
+    const el = document.getElementById('orderTotal');
+    if (el) el.textContent = 'Rp ' + sum.toLocaleString('id-ID');
+}
+
+/**
+ * Populate product rows from server-provided items for an order
+ * @param {string} noPesanan
+ */
+function populateOrderItems(noPesanan) {
+    if (!noPesanan) return;
+    const url = `index.php?page=detail_pesanan&fetch=json&pesanan=${encodeURIComponent(noPesanan)}`;
+    fetch(url, { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            if (!Array.isArray(data)) return;
+            const productList = document.getElementById('productList');
+            if (!productList) return;
+            productList.innerHTML = '';
+            data.forEach(item => {
+                // item: idDetail, idProduk, jumlah, hargaSatuan, totalHarga
+                addProductRow(item.idProduk, item.jumlah);
+            });
+            updateOrderTotal();
+        })
+        .catch(err => console.error('Failed to fetch order items:', err));
+}
+
+/**
+ * Fetch order detail items and render read-only detail table in modal
+ * @param {string} noPesanan
+ */
+function fetchAndRenderOrderDetail(noPesanan) {
+    if (!noPesanan) return;
+    const url = `index.php?page=detail_pesanan&fetch=json&pesanan=${encodeURIComponent(noPesanan)}`;
+    fetch(url, { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(items => {
+            if (!Array.isArray(items)) return;
+            const tbody = document.getElementById('detailProducts');
+            const detailNo = document.getElementById('detailNo');
+            const detailTanggal = document.getElementById('detailTanggal');
+            const detailDistributor = document.getElementById('detailDistributor');
+            const detailTotal = document.getElementById('detailTotal');
+
+            if (tbody) tbody.innerHTML = '';
+
+            let sum = 0;
+            items.forEach(it => {
+                const tr = document.createElement('tr');
+                // Prefer server-provided name, then client-side lookup, then legacy parse
+                let nama = it.namaProduk || '';
+                if (!nama && window.productsData && Array.isArray(window.productsData)) {
+                    const p = window.productsData.find(x => String(x.idProduk) === String(it.idProduk));
+                    if (p) nama = p.namaProduk;
+                }
+                if (!nama) {
+                    if (it.idProduk && it.idProduk.indexOf('|') !== -1) nama = it.idProduk.split('|')[0];
+                    else nama = it.idProduk || '-';
+                }
+
+                const harga = parseFloat(it.hargaSatuan) || 0;
+                const jumlah = parseInt(it.jumlah) || 0;
+                const total = parseFloat(it.totalHarga) || (harga * jumlah);
+                sum += total;
+
+                tr.innerHTML = `<td>${nama}</td><td>${formatCurrency(harga)}</td><td>${jumlah}</td><td>${formatCurrency(total)}</td>`;
+                if (tbody) tbody.appendChild(tr);
+            });
+
+            if (detailTotal) detailTotal.textContent = formatCurrency(sum);
+        })
+        .catch(err => console.error('Failed to load order detail:', err));
 }
 
 /**
@@ -515,14 +665,11 @@ function addProductRow(data = {}) {
     row.className = 'product-row';
     row.style.cssText = 'display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;';
     row.innerHTML = `
-        <select name="produk[]" class="form-control" style="flex:2;padding:0.6rem;border:1px solid var(--border-color);border-radius:var(--radius);">
+        <select name="produk[]" class="form-control prod-select" style="flex:2;padding:0.6rem;border:1px solid var(--border-color);border-radius:var(--radius);">
             <option value="">Pilih Produk</option>
-            <option value="Roti Tawar|12000">Roti Tawar - Rp 12.000</option>
-            <option value="Roti Manis|15000">Roti Manis - Rp 15.000</option>
-            <option value="Roti Coklat|18000">Roti Coklat - Rp 18.000</option>
         </select>
-        <input type="number" name="harga[]" placeholder="Harga" value="" style="flex:1;padding:0.6rem;border:1px solid var(--border-color);border-radius:var(--radius);" />
-        <input type="number" name="jumlah[]" placeholder="Jumlah" value="1" style="width:80px;padding:0.6rem;border:1px solid var(--border-color);border-radius:var(--radius);" />
+        <input type="number" name="harga[]" class="prod-harga" placeholder="Harga" value="" style="flex:1;padding:0.6rem;border:1px solid var(--border-color);border-radius:var(--radius);" />
+        <input type="number" name="jumlah[]" class="prod-qty" placeholder="Jumlah" value="1" style="width:80px;padding:0.6rem;border:1px solid var(--border-color);border-radius:var(--radius);" />
         <div style="min-width:100px;text-align:right;"> <strong class="row-total">Rp 0</strong> </div>
         <button type="button" class="btn btn-outline btn-remove">-</button>
     `;
@@ -535,11 +682,60 @@ function addProductRow(data = {}) {
     const jumlah = row.querySelector('input[name="jumlah[]"]');
     const btnRemove = row.querySelector('.btn-remove');
 
-    select.addEventListener('change', function() {
-        const parts = this.value.split('|');
-        if (parts.length === 2) {
-            harga.value = parts[1];
+    // populate options from window.productsData if available
+    if (window.productsData && window.productsData.length) {
+        select.innerHTML = '<option value="">Pilih Produk</option>';
+        window.productsData.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.idProduk;
+            opt.textContent = p.namaProduk + ' - Rp ' + parseFloat(p.harga).toLocaleString('id-ID');
+            opt.dataset.harga = p.harga;
+            select.appendChild(opt);
+        });
+    }
+
+    // If data provided, prefill selection and qty
+    if (data && data.idProduk) {
+        select.value = data.idProduk;
+        // if the option did not exist, create temporary option (handles legacy stored values like "Name|price")
+        if (select.value !== data.idProduk) {
+            let text = data.idProduk;
+            let hval = data.hargaSatuan || 0;
+            if (data.idProduk.indexOf('|') !== -1) {
+                const parts = data.idProduk.split('|');
+                text = parts[0].trim();
+                if (parts[1]) hval = parseFloat(parts[1]) || hval;
+            } else {
+                // try to find name from productsData by id (if id stored as name)
+                if (window.productsData) {
+                    const found = window.productsData.find(p => p.idProduk == data.idProduk || p.namaProduk == data.idProduk);
+                    if (found) {
+                        text = found.namaProduk;
+                        hval = found.harga;
+                    }
+                }
+            }
+            const opt = document.createElement('option');
+            opt.value = data.idProduk;
+            opt.textContent = text + (hval ? ' - Rp ' + parseFloat(hval).toLocaleString('id-ID') : '');
+            opt.dataset.harga = hval;
+            select.appendChild(opt);
+            select.value = data.idProduk;
+            harga.value = hval;
+        } else {
+            const chosen = select.options[select.selectedIndex];
+            const h = chosen && chosen.dataset ? parseFloat(chosen.dataset.harga || 0) : (data.hargaSatuan || 0);
+            harga.value = h;
         }
+    }
+    if (data && data.jumlah) {
+        jumlah.value = data.jumlah;
+    }
+
+    select.addEventListener('change', function() {
+        const chosen = this.options[this.selectedIndex];
+        const h = chosen && chosen.dataset ? parseFloat(chosen.dataset.harga || 0) : 0;
+        harga.value = h;
         updateRowTotal(row);
     });
 

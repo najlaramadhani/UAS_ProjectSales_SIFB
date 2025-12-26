@@ -1,16 +1,171 @@
 <?php
 /**
- * Pengiriman Management Page
- * Track and manage delivery (pengiriman) information
+ * Pengiriman (Delivery) Management - CRUD Operations
+ * Single file handling all delivery operations
+ * Accessible only to SALES role
  */
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+include 'config/koneksi.php';
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'sales') {
+    header('Location: login.php');
+    exit;
+}
+
+$current_user_id = $_SESSION['user_id'];
+
+// Handle DELETE
+if (isset($_GET['hapus'])) {
+    $noPengiriman = trim($_GET['hapus']);
+    
+    $check_query = "SELECT pg.noPengiriman FROM pengiriman pg 
+                   WHERE pg.noPengiriman = ? AND pg.idUser = ?";
+    $check_stmt = $koneksi->prepare($check_query);
+    $check_stmt->bind_param('ss', $noPengiriman, $current_user_id);
+    $check_stmt->execute();
+    
+    if ($check_stmt->get_result()->num_rows > 0) {
+        $delete_query = "DELETE FROM pengiriman WHERE noPengiriman = ?";
+        $delete_stmt = $koneksi->prepare($delete_query);
+        $delete_stmt->bind_param('s', $noPengiriman);
+        if ($delete_stmt->execute()) {
+            $_SESSION['success_message'] = 'Pengiriman berhasil dihapus!';
+        }
+        $delete_stmt->close();
+    }
+    $check_stmt->close();
+    
+    header('Location: index.php?page=pengiriman');
+    exit;
+}
+
+// Handle CREATE/UPDATE
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    $noSuratJalan = trim($_POST['noSuratJalan'] ?? '');
+    $tanggalKirim = trim($_POST['tanggalKirim'] ?? '');
+    $alamatPengiriman = trim($_POST['alamatPengiriman'] ?? '');
+    $statusPengiriman = trim($_POST['statusPengiriman'] ?? 'Pending');
+    $noPesanan = trim($_POST['noPesanan'] ?? '');
+    $noDistributor = trim($_POST['noDistributor'] ?? '');
+    
+    if (empty($noSuratJalan) || empty($tanggalKirim) || empty($alamatPengiriman) || empty($noPesanan)) {
+        $_SESSION['error_message'] = 'Semua field harus diisi!';
+    } else {
+        if ($action === 'tambah') {
+            // Generate pengiriman ID
+            $dateStr = str_replace('-', '', $tanggalKirim);
+            $id_query = "SELECT COUNT(*) as cnt FROM pengiriman WHERE noPengiriman LIKE 'PG$dateStr%'";
+            $id_result = $koneksi->query($id_query);
+            $id_row = $id_result->fetch_assoc();
+            $next_seq = str_pad($id_row['cnt'] + 1, 3, '0', STR_PAD_LEFT);
+            $noPengiriman = 'PG' . $dateStr . $next_seq;
+            
+            // Get order info to get distributor
+            $order_query = "SELECT noDistributor FROM pesanan WHERE noPesanan = ? AND idUser = ?";
+            $order_stmt = $koneksi->prepare($order_query);
+            $order_stmt->bind_param('ss', $noPesanan, $current_user_id);
+            $order_stmt->execute();
+            $order_result = $order_stmt->get_result();
+            
+            if ($order_result->num_rows === 0) {
+                $_SESSION['error_message'] = 'Order tidak ditemukan!';
+            } else {
+                $order_row = $order_result->fetch_assoc();
+                $noDistributor = $order_row['noDistributor'];
+                
+                $insert_query = "INSERT INTO pengiriman (noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan, noDistributor, idUser) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                $insert_stmt = $koneksi->prepare($insert_query);
+                $insert_stmt->bind_param('ssssssss', $noPengiriman, $noSuratJalan, $tanggalKirim, $alamatPengiriman, $statusPengiriman, $noPesanan, $noDistributor, $current_user_id);
+                
+                if ($insert_stmt->execute()) {
+                    $_SESSION['success_message'] = 'Pengiriman berhasil ditambahkan!';
+                } else {
+                    $_SESSION['error_message'] = 'Gagal menambahkan pengiriman!';
+                }
+                $insert_stmt->close();
+            }
+            $order_stmt->close();
+        } elseif ($action === 'ubah') {
+            $noPengiriman = trim($_POST['noPengiriman'] ?? '');
+            
+            $check_query = "SELECT noPengiriman FROM pengiriman WHERE noPengiriman = ? AND idUser = ?";
+            $check_stmt = $koneksi->prepare($check_query);
+            $check_stmt->bind_param('ss', $noPengiriman, $current_user_id);
+            $check_stmt->execute();
+            
+            if ($check_stmt->get_result()->num_rows > 0) {
+                $update_query = "UPDATE pengiriman SET noSuratJalan = ?, tanggalKirim = ?, alamatPengiriman = ?, statusPengiriman = ? WHERE noPengiriman = ?";
+                $update_stmt = $koneksi->prepare($update_query);
+                $update_stmt->bind_param('sssss', $noSuratJalan, $tanggalKirim, $alamatPengiriman, $statusPengiriman, $noPengiriman);
+                
+                if ($update_stmt->execute()) {
+                    $_SESSION['success_message'] = 'Pengiriman berhasil diperbarui!';
+                } else {
+                    $_SESSION['error_message'] = 'Gagal memperbarui pengiriman!';
+                }
+                $update_stmt->close();
+            }
+            $check_stmt->close();
+        }
+    }
+    
+    header('Location: index.php?page=pengiriman');
+    exit;
+}
+
+// READ - Get pengiriman for current user
+$query = "SELECT p.noPengiriman, p.noSuratJalan, p.tanggalKirim, p.alamatPengiriman, p.statusPengiriman, p.noPesanan, d.namaDistributor 
+          FROM pengiriman p 
+          JOIN distributor d ON p.noDistributor = d.noDistributor 
+          WHERE p.idUser = ? ORDER BY p.tanggalKirim DESC";
+$stmt = $koneksi->prepare($query);
+$stmt->bind_param('s', $current_user_id);
+$stmt->execute();
+$pengiriman_list = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+// Get orders for dropdown
+$order_query = "SELECT DISTINCT p.noPesanan, d.namaDistributor FROM pesanan p 
+               JOIN distributor d ON p.noDistributor = d.noDistributor 
+               WHERE p.idUser = ? ORDER BY p.noPesanan DESC";
+$order_stmt = $koneksi->prepare($order_query);
+$order_stmt->bind_param('s', $current_user_id);
+$order_stmt->execute();
+$orders = $order_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$order_stmt->close();
+
+// Calculate status counts
+$status_counts = ['Pending' => 0, 'Dikirim' => 0, 'Selesai' => 0];
+foreach ($pengiriman_list as $pg) {
+    $status = ucfirst($pg['statusPengiriman']);
+    if (isset($status_counts[$status])) {
+        $status_counts[$status]++;
+    }
+}
 ?>
+
 <div class="page-header">
     <h2>Manajemen Pengiriman</h2>
     <p class="page-subtitle">Kelola pengiriman pesanan</p>
 </div>
 
+<?php
+if (isset($_SESSION['success_message'])) {
+    echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['success_message']) . '</div>';
+    unset($_SESSION['success_message']);
+}
+if (isset($_SESSION['error_message'])) {
+    echo '<div class="alert alert-error">' . htmlspecialchars($_SESSION['error_message']) . '</div>';
+    unset($_SESSION['error_message']);
+}
+?>
+
 <div class="page-actions">
-    <button class="btn btn-primary btn-lg" onclick="openModal('Buat Pengiriman Baru','pengirimanForm')">
+    <button class="btn btn-primary btn-lg" onclick="openAddPengirimanModal()">
         + Buat Pengiriman
     </button>
 </div>
@@ -28,45 +183,25 @@
             </tr>
         </thead>
         <tbody>
-            <tr>
-                <td><strong>DO-SO202501001-01</strong></td>
-                <td>SJ-001</td>
-                <td>24 Des 2025</td>
-                <td>Jl. Kenanga No.3, Jakarta</td>
-                <td>
-                    <span class="badge badge-success">Selesai</span>
-                </td>
-                <td class="action-cell">
-                    <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0089')">Detail</button>
-                    <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0089')">Edit</button>
-                    <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
-                </td>
-            </tr>
-            <tr>
-                <td><strong>DO-SO202501001-02</strong></td>
-                <td>SJ-002</td>
-                <td>24 Des 2025</td>
-                <td>Jl. Anggrek No.8, Bandung</td>
-                <td>
-                    <span class="badge badge-warning">Dikirim</span>
-                </td>
-                <td class="action-cell">
-                    <button class="btn-action btn-view" onclick="openModal('Detail Pengiriman','pengirimanDetail','PGR-2025-0088')">Detail</button>
-                    <button class="btn-action btn-edit" onclick="openModal('Edit Pengiriman','pengirimanForm','PGR-2025-0088')">Edit</button>
-                    <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) alert('Pengiriman dihapus')">Hapus</button>
-                </td>
-            </tr>
+            <?php if (empty($pengiriman_list)): ?>
+                <tr><td colspan="6" style="text-align:center;color:#999;">Belum ada pengiriman</td></tr>
+            <?php else: ?>
+                <?php foreach ($pengiriman_list as $pg): ?>
+                    <tr>
+                        <td><strong><?php echo htmlspecialchars($pg['noPengiriman']); ?></strong></td>
+                        <td><?php echo htmlspecialchars($pg['noSuratJalan']); ?></td>
+                        <td><?php echo date('d M Y', strtotime($pg['tanggalKirim'])); ?></td>
+                        <td><?php echo htmlspecialchars($pg['alamatPengiriman']); ?></td>
+                        <td><span class="badge badge-<?php echo strtolower(str_replace(' ', '', $pg['statusPengiriman'])); ?>"><?php echo ucfirst($pg['statusPengiriman']); ?></span></td>
+                        <td class="action-cell">
+                            <button class="btn-action btn-edit" onclick="openEditPengirimanModal('<?php echo htmlspecialchars($pg['noPengiriman']); ?>', '<?php echo htmlspecialchars($pg['noSuratJalan']); ?>', '<?php echo htmlspecialchars($pg['tanggalKirim']); ?>', '<?php echo htmlspecialchars(str_replace("'", "\\'", $pg['alamatPengiriman'])); ?>', '<?php echo htmlspecialchars($pg['statusPengiriman']); ?>', '<?php echo htmlspecialchars($pg['noPesanan']); ?>')">Edit</button>
+                            <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) window.location.href='index.php?page=pengiriman&hapus=<?php echo htmlspecialchars($pg['noPengiriman']); ?>'">Hapus</button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </tbody>
     </table>
-</div>
-
-<!-- Pagination -->
-<div class="pagination">
-    <button class="btn-page" disabled>&laquo; Previous</button>
-    <button class="btn-page active">1</button>
-    <button class="btn-page">2</button>
-    <button class="btn-page">3</button>
-    <button class="btn-page">Next &raquo;</button>
 </div>
 
 <!-- Status Summary -->
@@ -75,76 +210,101 @@
         <div class="summary-icon">✓</div>
         <div class="summary-content">
             <p class="summary-label">Selesai</p>
-            <p class="summary-value">1 pengiriman</p>
+            <p class="summary-value"><?php echo $status_counts['Selesai']; ?> pengiriman</p>
         </div>
     </div>
     <div class="summary-card">
         <div class="summary-icon">→</div>
         <div class="summary-content">
             <p class="summary-label">Dikirim</p>
-            <p class="summary-value">1 pengiriman</p>
+            <p class="summary-value"><?php echo $status_counts['Dikirim']; ?> pengiriman</p>
         </div>
     </div>
     <div class="summary-card">
         <div class="summary-icon">⏳</div>
         <div class="summary-content">
             <p class="summary-label">Pending</p>
-            <p class="summary-value">0 pengiriman</p>
+            <p class="summary-value"><?php echo $status_counts['Pending']; ?> pengiriman</p>
         </div>
     </div>
 </div>
 
 <script>
-function openPengirimanModal(title, pengirimanId = null) {
-    document.getElementById('modalTitle').textContent = title;
-    const formContent = document.getElementById('formContent');
-    
-    // prefer using global openModal('...','pengirimanForm') but keep this as fallback
-    formContent.innerHTML = `
-        <div class="form-group">
-            <label for="noPengiriman">No Pengiriman</label>
-            <input type="text" id="noPengiriman" name="noPengiriman" placeholder="Auto generated" readonly>
-        </div>
-        <div class="form-group">
-            <label for="tanggalKirim">Tanggal Kirim</label>
-            <input type="date" id="tanggalKirim" name="tanggalKirim" required>
-        </div>
-        <div class="form-group">
-            <label for="alamatPengiriman">Alamat Pengiriman</label>
-            <textarea id="alamatPengiriman" name="alamatPengiriman" placeholder="Jalan, No., Kota, Provinsi" rows="3" required></textarea>
-        </div>
-        <div class="form-group">
-            <label for="namaDriver">Nama Driver</label>
-            <input type="text" id="namaDriver" name="namaDriver" placeholder="Nama driver" required />
-        </div>
-        <div class="form-group">
-            <label for="kontakDriver">Kontak Driver</label>
-            <input type="text" id="kontakDriver" name="kontakDriver" placeholder="08xxxxxxxxxx" required />
-        </div>
-        <div class="form-group">
-            <label for="statusPengiriman">Status Pengiriman</label>
-            <select id="statusPengiriman" name="statusPengiriman" required>
-                <option value="">Pilih Status</option>
-                <option value="pending">Pending</option>
-                <option value="dikirim">Dikirim</option>
-                <option value="selesai">Selesai</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="noOrder">No Order Terkait</label>
-            <select id="noOrder" name="noOrder" required>
-                <option value="">Pilih Order</option>
-                <option value="ORD-2025-0156">ORD-2025-0156 - PT Abadi Jaya</option>
-                <option value="ORD-2025-0155">ORD-2025-0155 - CV Maju Bersama</option>
-                <option value="ORD-2025-0154">ORD-2025-0154 - PT Bakery Nusantara</option>
-            </select>
-        </div>
-    `;
+window.ordersData = <?php echo json_encode($orders); ?>;
 
-    document.getElementById('modalForm').style.display = 'block';
+function openAddPengirimanModal() {
+    openModal('Buat Pengiriman Baru', 'pengirimanForm');
+    document.getElementById('dynamicForm').reset();
+    
+    let idField = document.getElementById('noPengirimanHidden');
+    if (idField) idField.remove();
+    
+    updateOrderSelect();
+    
+    document.getElementById('dynamicForm').onsubmit = function(e) {
+        e.preventDefault();
+        submitPengirimanForm('tambah');
+    };
 }
 
-function closeModal() {
-    document.getElementById('modalForm').style.display = 'none';
+function openEditPengirimanModal(noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan) {
+    openModal('Edit Pengiriman', 'pengirimanForm');
+    
+    setTimeout(() => {
+        updateOrderSelect(noPesanan);
+        document.getElementById('noSuratJalan').value = noSuratJalan;
+        document.getElementById('tanggalKirim').value = tanggalKirim;
+        document.getElementById('alamatPengiriman').value = alamatPengiriman;
+        document.getElementById('statusPengiriman').value = statusPengiriman;
+        document.getElementById('noPesanan').value = noPesanan;
+        
+        let form = document.getElementById('dynamicForm');
+        let idField = document.getElementById('noPengirimanHidden');
+        if (!idField) {
+            idField = document.createElement('input');
+            idField.type = 'hidden';
+            idField.id = 'noPengirimanHidden';
+            idField.name = 'noPengiriman';
+            form.appendChild(idField);
+        }
+        idField.value = noPengiriman;
+        
+        form.onsubmit = function(e) {
+            e.preventDefault();
+            submitPengirimanForm('ubah');
+        };
+    }, 50);
+}
+
+function updateOrderSelect(selectedId = null) {
+    const select = document.getElementById('noPesanan');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Pilih Order</option>';
+    window.ordersData.forEach(o => {
+        select.innerHTML += `<option value="${o.noPesanan}">${o.noPesanan} - ${o.namaDistributor}</option>`;
+    });
+    if (selectedId) select.value = selectedId;
+}
+
+function submitPengirimanForm(action) {
+    const form = document.getElementById('dynamicForm');
+    const formData = new FormData(form);
+    formData.append('action', action);
+    
+    const actualForm = document.createElement('form');
+    actualForm.method = 'POST';
+    actualForm.action = 'index.php?page=pengiriman';
+    
+    for (let [key, value] of formData.entries()) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value;
+        actualForm.appendChild(input);
+    }
+    
+    document.body.appendChild(actualForm);
+    actualForm.submit();
 }
 </script>
