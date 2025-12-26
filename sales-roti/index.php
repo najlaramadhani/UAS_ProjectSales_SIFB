@@ -5,6 +5,7 @@
  */
 
 session_start();
+include 'config/koneksi.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -21,12 +22,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
 
 // Determine current page
 $page = isset($_GET['page']) ? trim($_GET['page']) : 'dashboard';
-$allowed_pages = ['dashboard', 'order', 'distributor', 'pengiriman', 'laporan'];
+$allowed_pages = ['dashboard', 'order', 'distributor', 'pengiriman', 'laporan', 'detail_pesanan'];
 
 if (!in_array($page, $allowed_pages)) {
     $page = 'dashboard';
 }
 
+// Store page in global for sidebar active state
+$GLOBALS['page'] = $page;
 ?>
 <!DOCTYPE html>
 <html lang="id">
