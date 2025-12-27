@@ -1,6 +1,7 @@
 /**
  * Sales Dashboard - Vanilla JavaScript
  * Modal management, navigation, and interactive features
+ * Last updated: 2025-12-27
  */
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -46,8 +47,21 @@ function openModal(title, formType, id = null) {
 
     // If detail view, fetch data after modal visible
     if (formType === 'orderDetail' && id) {
-        setTimeout(() => { fetchAndRenderOrderDetail(id); }, 100);
+        setTimeout(() => { 
+            console.log('About to fetch detail for:', id);
+            const detailNoEl = document.getElementById('detailNo');
+            console.log('detailNo element found:', !!detailNoEl);
+            fetchAndRenderOrderDetail(id); 
+        }, 300);
     }
+}
+
+/**
+ * Wrapper function for opening order detail modal
+ * @param {string} noPesanan - Order number
+ */
+function openOrderDetailModal(noPesanan) {
+    openModal('Detail Order', 'orderDetail', noPesanan);
 }
 
 /**
@@ -110,6 +124,10 @@ function loadFormContent(container, formType, id) {
         case 'distributorForm':
             formHTML = `
                 <div class="form-group">
+                    <label for="noDistributor">No Distributor</label>
+                    <input type="text" id="noDistributor" name="noDistributor" placeholder="Auto generated" readonly>
+                </div>
+                <div class="form-group">
                     <label for="namaDistributor">Nama Distributor</label>
                     <input type="text" id="namaDistributor" name="namaDistributor" placeholder="Nama lengkap distributor" required>
                 </div>
@@ -147,18 +165,24 @@ function loadFormContent(container, formType, id) {
                     <textarea id="alamatPengiriman" name="alamatPengiriman" placeholder="Jalan, No., Kota, Provinsi" rows="3" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="statusPengiriman">Status Pengiriman</label>
-                    <select id="statusPengiriman" name="statusPengiriman" required>
-                        <option value="">Pilih Status</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Dikirim">Dikirim</option>
-                        <option value="Selesai">Selesai</option>
+                    <label for="idDriver">Driver</label>
+                    <select id="idDriver" name="idDriver" required>
+                        <option value="">Pilih Driver</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label for="noPesanan">No Order</label>
                     <select id="noPesanan" name="noPesanan" required>
                         <option value="">Pilih Order</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="statusPengiriman">Status Pengiriman</label>
+                    <select id="statusPengiriman" name="statusPengiriman" required>
+                        <option value="">Pilih Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Dikirim">Dikirim</option>
+                        <option value="Selesai">Selesai</option>
                     </select>
                 </div>
             `;
@@ -169,15 +193,15 @@ function loadFormContent(container, formType, id) {
             formHTML = `
                 <div class="form-group">
                     <label>No Order</label>
-                    <div><strong id="detailNo">${id || 'ORD-XXXX-0001'}</strong></div>
+                    <div><strong id="detailNo">-</strong></div>
                 </div>
                 <div class="form-group">
                     <label>Tanggal Order</label>
-                    <div id="detailTanggal">24 Des 2025</div>
+                    <div id="detailTanggal">-</div>
                 </div>
                 <div class="form-group">
                     <label>Distributor</label>
-                    <div id="detailDistributor">PT Abadi Jaya</div>
+                    <div id="detailDistributor">-</div>
                 </div>
                 <div class="form-group">
                     <label>Produk</label>
@@ -187,19 +211,17 @@ function loadFormContent(container, formType, id) {
                                 <tr><th>Produk</th><th>Harga</th><th>Jumlah</th><th>Total</th></tr>
                             </thead>
                             <tbody id="detailProducts">
-                                <tr><td>Roti Tawar</td><td>Rp 12.000</td><td>10</td><td>Rp 120.000</td></tr>
-                                <tr><td>Roti Coklat</td><td>Rp 18.000</td><td>5</td><td>Rp 90.000</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
                 <div class="form-group" style="text-align:right; font-weight:700;">
                     <label>Total</label>
-                    <div id="detailTotal">Rp 210.000</div>
+                    <div id="detailTotal">Rp 0</div>
                 </div>
                 <div class="form-group">
                     <label>Status</label>
-                    <div id="detailStatus"><span class="badge badge-success">Selesai</span></div>
+                    <div id="detailStatus">-</div>
                 </div>
             `;
             break;
@@ -355,46 +377,140 @@ function populateOrderItems(noPesanan) {
  * @param {string} noPesanan
  */
 function fetchAndRenderOrderDetail(noPesanan) {
-    if (!noPesanan) return;
+    if (!noPesanan) {
+        console.error('noPesanan is empty');
+        return;
+    }
+    
     const url = `index.php?page=detail_pesanan&fetch=json&pesanan=${encodeURIComponent(noPesanan)}`;
+    console.log('fetchAndRenderOrderDetail called with:', noPesanan, 'URL:', url);
+    
+    // Verify elements exist before fetch
+    const detailNo = document.getElementById('detailNo');
+    const detailTanggal = document.getElementById('detailTanggal');
+    const detailDistributor = document.getElementById('detailDistributor');
+    const detailStatus = document.getElementById('detailStatus');
+    const tbody = document.getElementById('detailProducts');
+    const detailTotal = document.getElementById('detailTotal');
+    
+    console.log('Elements check:', {
+        detailNo: !!detailNo,
+        detailTanggal: !!detailTanggal,
+        detailDistributor: !!detailDistributor,
+        detailStatus: !!detailStatus,
+        tbody: !!tbody,
+        detailTotal: !!detailTotal
+    });
+    
     fetch(url, { credentials: 'same-origin' })
-        .then(r => r.json())
-        .then(items => {
-            if (!Array.isArray(items)) return;
-            const tbody = document.getElementById('detailProducts');
-            const detailNo = document.getElementById('detailNo');
-            const detailTanggal = document.getElementById('detailTanggal');
-            const detailDistributor = document.getElementById('detailDistributor');
-            const detailTotal = document.getElementById('detailTotal');
-
-            if (tbody) tbody.innerHTML = '';
-
-            let sum = 0;
-            items.forEach(it => {
-                const tr = document.createElement('tr');
-                // Prefer server-provided name, then client-side lookup, then legacy parse
-                let nama = it.namaProduk || '';
-                if (!nama && window.productsData && Array.isArray(window.productsData)) {
-                    const p = window.productsData.find(x => String(x.idProduk) === String(it.idProduk));
-                    if (p) nama = p.namaProduk;
-                }
-                if (!nama) {
-                    if (it.idProduk && it.idProduk.indexOf('|') !== -1) nama = it.idProduk.split('|')[0];
-                    else nama = it.idProduk || '-';
-                }
-
-                const harga = parseFloat(it.hargaSatuan) || 0;
-                const jumlah = parseInt(it.jumlah) || 0;
-                const total = parseFloat(it.totalHarga) || (harga * jumlah);
-                sum += total;
-
-                tr.innerHTML = `<td>${nama}</td><td>${formatCurrency(harga)}</td><td>${jumlah}</td><td>${formatCurrency(total)}</td>`;
-                if (tbody) tbody.appendChild(tr);
-            });
-
-            if (detailTotal) detailTotal.textContent = formatCurrency(sum);
+        .then(r => {
+            console.log('Fetch response status:', r.status);
+            if (!r.ok) {
+                throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+            }
+            return r.text(); // Get as text first to debug
         })
-        .catch(err => console.error('Failed to load order detail:', err));
+        .then(text => {
+            console.log('Raw response text:', text);
+            try {
+                const data = JSON.parse(text);
+                console.log('Parsed JSON:', data);
+                
+                // Handle error response
+                if (data.error) {
+                    console.error('Server error:', data.error);
+                    if (data.debug) console.log('Debug info:', data.debug);
+                    return;
+                }
+                
+                // Extract header and items from response
+                const header = data.header || {};
+                const items = Array.isArray(data.items) ? data.items : [];
+                
+                console.log('Processing header:', header);
+                console.log('Processing items:', items);
+                
+                // Update header fields
+                if (detailNo) {
+                    detailNo.textContent = header.noPesanan || '-';
+                    console.log('Updated detailNo to:', header.noPesanan);
+                } else {
+                    console.warn('detailNo element not found');
+                }
+                
+                if (detailTanggal) {
+                    const tanggal = header.tanggalOrder ? new Date(header.tanggalOrder).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-';
+                    detailTanggal.textContent = tanggal;
+                    console.log('Updated detailTanggal to:', tanggal);
+                } else {
+                    console.warn('detailTanggal element not found');
+                }
+                
+                if (detailDistributor) {
+                    detailDistributor.textContent = header.namaDistributor || '-';
+                    console.log('Updated detailDistributor to:', header.namaDistributor);
+                } else {
+                    console.warn('detailDistributor element not found');
+                }
+                
+                if (detailStatus) {
+                    const statusClass = header.status === 'Selesai' ? 'badge-success' : (header.status === 'Dikirim' ? 'badge-warning' : 'badge-info');
+                    detailStatus.innerHTML = `<span class="badge ${statusClass}">${header.status || '-'}</span>`;
+                    console.log('Updated detailStatus to:', header.status);
+                } else {
+                    console.warn('detailStatus element not found');
+                }
+                
+                // Update detail items table
+                if (tbody) {
+                    tbody.innerHTML = '';
+                    console.log('Cleared tbody, now populating with', items.length, 'items');
+                } else {
+                    console.warn('tbody#detailProducts not found');
+                    return;
+                }
+
+                let sum = 0;
+                items.forEach((it, idx) => {
+                    const tr = document.createElement('tr');
+                    // Prefer server-provided name, then client-side lookup, then legacy parse
+                    let nama = it.namaProduk || '';
+                    if (!nama && window.productsData && Array.isArray(window.productsData)) {
+                        const p = window.productsData.find(x => String(x.idProduk) === String(it.idProduk));
+                        if (p) nama = p.namaProduk;
+                    }
+                    if (!nama) {
+                        if (it.idProduk && it.idProduk.indexOf('|') !== -1) nama = it.idProduk.split('|')[0];
+                        else nama = it.idProduk || '-';
+                    }
+
+                    const harga = parseFloat(it.hargaSatuan) || 0;
+                    const jumlah = parseInt(it.jumlah) || 0;
+                    const total = parseFloat(it.totalHarga) || (harga * jumlah);
+                    sum += total;
+
+                    tr.innerHTML = `<td>${nama}</td><td>${formatCurrency(harga)}</td><td>${jumlah}</td><td>${formatCurrency(total)}</td>`;
+                    tbody.appendChild(tr);
+                    console.log(`Row ${idx + 1}: ${nama} x ${jumlah} = Rp ${formatCurrency(total)}`);
+                });
+
+                if (detailTotal) {
+                    detailTotal.textContent = formatCurrency(sum);
+                    console.log('Updated detailTotal to:', formatCurrency(sum));
+                } else {
+                    console.warn('detailTotal element not found');
+                }
+                
+                console.log('Detail view updated with', items.length, 'items, total:', sum);
+            } catch (parseErr) {
+                console.error('Failed to parse JSON:', parseErr);
+                console.error('Response was:', text);
+            }
+        })
+        .catch(err => {
+            console.error('Failed to load order detail:', err);
+            console.error('Error stack:', err.stack);
+        });
 }
 
 /**

@@ -10,9 +10,20 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'config/koneksi.php';
 
+// For JSON endpoint, check session but don't redirect - return JSON error instead
+$is_json_request = isset($_GET['fetch']) && $_GET['fetch'] === 'json';
+
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'sales') {
-    header('Location: login.php');
-    exit;
+    if ($is_json_request) {
+        // Return JSON error for AJAX requests
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized - please login']);
+        exit;
+    } else {
+        // Redirect for regular page requests
+        header('Location: login.php');
+        exit;
+    }
 }
 
 $current_user_id = $_SESSION['user_id'];
@@ -45,19 +56,6 @@ if (isset($_GET['hapus'])) {
 // Handle CREATE/UPDATE
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
-    // Debug: log incoming POST for diagnosis
-    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'order_debug.log';
-    $logEntry = '[' . date('Y-m-d H:i:s') . "] POST action={$action} user={$current_user_id} POST=" . json_encode($_POST, JSON_UNESCAPED_UNICODE) . PHP_EOL;
-    @file_put_contents($logPath, $logEntry, FILE_APPEND);
-    // Also capture raw request body and headers for debugging (temporary)
-    $rawInput = @file_get_contents('php://input');
-    if ($rawInput !== false && strlen($rawInput) > 0) {
-        @file_put_contents($logPath, '[' . date('Y-m-d H:i:s') . "] RAW=" . $rawInput . PHP_EOL, FILE_APPEND);
-    }
-    if (function_exists('getallheaders')) {
-        $hdrs = getallheaders();
-        @file_put_contents($logPath, '[' . date('Y-m-d H:i:s') . "] HEADERS=" . json_encode($hdrs, JSON_UNESCAPED_UNICODE) . PHP_EOL, FILE_APPEND);
-    }
     
     if ($action === 'tambah') {
         $tanggalOrder = trim($_POST['tanggalOrder'] ?? '');
@@ -66,102 +64,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         if (empty($tanggalOrder) || empty($noDistributor)) {
             $_SESSION['error_message'] = 'Tanggal dan distributor harus diisi!';
+        } else if (!isset($_POST['produk']) || !is_array($_POST['produk']) || count($_POST['produk']) === 0) {
+            $_SESSION['error_message'] = 'Minimal harus ada satu produk!';
         } else {
-            // Generate order number: SOYYYYMMxxx (use MAX sequence per month to avoid duplicates)
-            $dateStr = date('Ym', strtotime($tanggalOrder)); // YYYYMM
-            $likePattern = 'SO' . $dateStr . '%';
-            // sequence starts after 8 characters: 'SO' + YYYYMM => seq starts at position 9
-            $id_query = "SELECT MAX(CAST(SUBSTRING(noPesanan, 9) AS UNSIGNED)) as max_seq FROM pesanan WHERE noPesanan LIKE ?";
-            $id_stmt = $koneksi->prepare($id_query);
-            $id_stmt->bind_param('s', $likePattern);
-            $id_stmt->execute();
-            $id_result = $id_stmt->get_result();
-            $id_row = $id_result->fetch_assoc();
-            $next_num = (isset($id_row['max_seq']) && $id_row['max_seq'] !== null) ? intval($id_row['max_seq']) + 1 : 1;
-            $next_seq = str_pad($next_num, 3, '0', STR_PAD_LEFT);
-            $noPesanan = 'SO' . $dateStr . $next_seq; // e.g., SO202510001
-            $id_stmt->close();
+            // ========================================
+            // START DATABASE TRANSACTION
+            // ========================================
+            $koneksi->begin_transaction();
             
-            $insert_query = "INSERT INTO pesanan (noPesanan, tanggalOrder, status, idUser, noDistributor) VALUES (?, ?, ?, ?, ?)";
-            $insert_stmt = $koneksi->prepare($insert_query);
-            $insert_stmt->bind_param('sssss', $noPesanan, $tanggalOrder, $status, $current_user_id, $noDistributor);
-            
-            if ($insert_stmt->execute()) {
-                // log created order id
-                @file_put_contents($logPath, '[' . date('Y-m-d H:i:s') . "] INSERTED noPesanan={$noPesanan}\n", FILE_APPEND);
-                // If order created, process any submitted products
-                if (isset($_POST['produk']) && is_array($_POST['produk'])) {
-                    $produk_arr = $_POST['produk'];
-                    $jumlah_arr = $_POST['jumlah'] ?? [];
-
-                    // get current count to start sequence
-                    $seq_query = "SELECT COUNT(*) as cnt FROM detail_pesanan WHERE noPesanan = ?";
-                    $seq_stmt = $koneksi->prepare($seq_query);
-                    $seq_stmt->bind_param('s', $noPesanan);
-                    $seq_stmt->execute();
-                    $seq_row = $seq_stmt->get_result()->fetch_assoc();
-                    $base_seq = intval($seq_row['cnt']);
-                    $seq_stmt->close();
-
-                    $insert_detail_query = "INSERT INTO detail_pesanan (idDetail, jumlah, hargaSatuan, totalHarga, noPesanan, idProduk) VALUES (?, ?, ?, ?, ?, ?)";
-                    $insert_detail_stmt = $koneksi->prepare($insert_detail_query);
-
-                    for ($i = 0; $i < count($produk_arr); $i++) {
-                        $idProduk = trim($produk_arr[$i]);
-                        $qty = intval($jumlah_arr[$i] ?? 0);
-                        if (empty($idProduk) || $qty <= 0) continue;
-
-                        // Normalize idProduk: if given value is not an actual id, try to match by name or 'Name|price' legacy value
-                        $hargaSatuan = null;
-                        // check if id exists
-                        $check_q = "SELECT idProduk, harga FROM produk WHERE idProduk = ?";
-                        $check_stmt = $koneksi->prepare($check_q);
-                        $check_stmt->bind_param('s', $idProduk);
-                        $check_stmt->execute();
-                        $check_res = $check_stmt->get_result();
-                        if ($check_res->num_rows === 0) {
-                            // try parse name|price or match by name
-                            $parsedName = $idProduk;
-                            if (strpos($idProduk, '|') !== false) {
-                                $parts = explode('|', $idProduk);
-                                $parsedName = trim($parts[0]);
-                            }
-                            $search_q = "SELECT idProduk, harga FROM produk WHERE namaProduk = ? LIMIT 1";
-                            $search_stmt = $koneksi->prepare($search_q);
-                            $search_stmt->bind_param('s', $parsedName);
-                            $search_stmt->execute();
-                            $search_res = $search_stmt->get_result();
-                            if ($search_res->num_rows > 0) {
-                                $prow = $search_res->fetch_assoc();
-                                $idProduk = $prow['idProduk'];
-                                $hargaSatuan = $prow['harga'];
-                            }
-                            $search_stmt->close();
-                        } else {
-                            $prow = $check_res->fetch_assoc();
-                            $hargaSatuan = $prow['harga'];
-                        }
-                        $check_stmt->close();
-
-                        if ($hargaSatuan === null) continue; // skip if still not found
-
-                        $totalHarga = $hargaSatuan * $qty;
-
-                        $base_seq++;
-                        $seq_str = str_pad($base_seq, 2, '0', STR_PAD_LEFT);
-                        $idDetail = "DTL-$noPesanan-$seq_str";
-
-                        $insert_detail_stmt->bind_param('siddss', $idDetail, $qty, $hargaSatuan, $totalHarga, $noPesanan, $idProduk);
-                        $insert_detail_stmt->execute();
+            try {
+                // ========================================
+                // STEP 1: Generate nomor pesanan
+                // ========================================
+                $dateStr = date('Ym', strtotime($tanggalOrder));
+                $likePattern = 'SO' . $dateStr . '%';
+                
+                $id_query = "SELECT MAX(CAST(SUBSTRING(noPesanan, 9) AS UNSIGNED)) as max_seq FROM pesanan WHERE noPesanan LIKE ? AND idUser = ?";
+                $id_stmt = $koneksi->prepare($id_query);
+                if (!$id_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
+                
+                $id_stmt->bind_param('ss', $likePattern, $current_user_id);
+                if (!$id_stmt->execute()) throw new Exception("Execute failed: " . $id_stmt->error);
+                
+                $id_result = $id_stmt->get_result();
+                $id_row = $id_result->fetch_assoc();
+                $next_num = (isset($id_row['max_seq']) && $id_row['max_seq'] !== null) ? intval($id_row['max_seq']) + 1 : 1;
+                $next_seq = str_pad($next_num, 3, '0', STR_PAD_LEFT);
+                $noPesanan = 'SO' . $dateStr . $next_seq;
+                $id_stmt->close();
+                
+                // ========================================
+                // STEP 2: INSERT ke tabel PESANAN
+                // ========================================
+                $insert_query = "INSERT INTO pesanan (noPesanan, tanggalOrder, status, idUser, noDistributor) VALUES (?, ?, ?, ?, ?)";
+                $insert_stmt = $koneksi->prepare($insert_query);
+                if (!$insert_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
+                
+                $insert_stmt->bind_param('sssss', $noPesanan, $tanggalOrder, $status, $current_user_id, $noDistributor);
+                if (!$insert_stmt->execute()) throw new Exception("Insert pesanan failed: " . $insert_stmt->error);
+                $insert_stmt->close();
+                
+                // ========================================
+                // STEP 3: INSERT ke tabel DETAIL_PESANAN
+                // ========================================
+                $produk_arr = $_POST['produk'];
+                $jumlah_arr = $_POST['jumlah'] ?? [];
+                $detail_seq = 1;
+                
+                foreach ($produk_arr as $i => $idProduk) {
+                    $idProduk = trim($idProduk);
+                    $jumlah = intval($jumlah_arr[$i] ?? 0);
+                    
+                    if (empty($idProduk) || $jumlah <= 0) continue;
+                    
+                    // Ambil harga dari database produk
+                    $price_query = "SELECT harga FROM produk WHERE idProduk = ?";
+                    $price_stmt = $koneksi->prepare($price_query);
+                    if (!$price_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
+                    
+                    $price_stmt->bind_param('s', $idProduk);
+                    if (!$price_stmt->execute()) throw new Exception("Execute failed: " . $price_stmt->error);
+                    
+                    $price_res = $price_stmt->get_result();
+                    if ($price_res->num_rows === 0) {
+                        $price_stmt->close();
+                        throw new Exception("Produk dengan ID $idProduk tidak ditemukan!");
                     }
-                    $insert_detail_stmt->close();
-                }
+                    
+                    $price_row = $price_res->fetch_assoc();
+                    $hargaSatuan = floatval($price_row['harga']);
+                    $price_stmt->close();
 
-                $_SESSION['success_message'] = 'Order berhasil ditambahkan!';
-            } else {
-                $_SESSION['error_message'] = 'Gagal menambahkan order: ' . $koneksi->error;
+                    $totalHarga = $hargaSatuan * $jumlah;
+
+                    $seq_str = str_pad($detail_seq, 2, '0', STR_PAD_LEFT);
+                    $idDetail = "DTL-$noPesanan-$seq_str";
+
+                    // Insert setiap produk yang diinput
+                    $insert_detail_query = "INSERT INTO detail_pesanan (idDetail, noPesanan, idProduk, jumlah, hargaSatuan, totalHarga) VALUES (?, ?, ?, ?, ?, ?)";
+                    $insert_detail_stmt = $koneksi->prepare($insert_detail_query);
+                    $insert_detail_stmt->bind_param('sssidd', $idDetail, $noPesanan, $idProduk, $jumlah, $hargaSatuan, $totalHarga);
+                    if (!$insert_detail_stmt->execute()) throw new Exception("Insert detail failed: " . $insert_detail_stmt->error);
+                    $insert_detail_stmt->close();
+                    
+                    $detail_seq++;
+                }
+                
+                // ========================================
+                // STEP 4: COMMIT TRANSACTION
+                // ========================================
+                $koneksi->commit();
+                $_SESSION['success_message'] = "Pesanan $noPesanan berhasil dibuat dengan " . ($detail_seq - 1) . " item!";
+                
+            } catch (Exception $e) {
+                $koneksi->rollback();
+                $_SESSION['error_message'] = 'Gagal membuat pesanan: ' . $e->getMessage();
             }
-            $insert_stmt->close();
         }
     } elseif ($action === 'ubah') {
         $noPesanan = trim($_POST['noPesanan'] ?? '');
@@ -175,88 +173,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $check_stmt->execute();
         
         if ($check_stmt->get_result()->num_rows > 0) {
-            $update_query = "UPDATE pesanan SET tanggalOrder = ?, status = ?, noDistributor = ? WHERE noPesanan = ?";
-            $update_stmt = $koneksi->prepare($update_query);
-            $update_stmt->bind_param('ssss', $tanggalOrder, $status, $noDistributor, $noPesanan);
+            // START TRANSACTION untuk update
+            $koneksi->begin_transaction();
             
-            if ($update_stmt->execute()) {
+            try {
+                $update_query = "UPDATE pesanan SET tanggalOrder = ?, status = ?, noDistributor = ? WHERE noPesanan = ?";
+                $update_stmt = $koneksi->prepare($update_query);
+                if (!$update_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
+                
+                $update_stmt->bind_param('ssss', $tanggalOrder, $status, $noDistributor, $noPesanan);
+                if (!$update_stmt->execute()) throw new Exception("Update pesanan failed: " . $update_stmt->error);
+                $update_stmt->close();
+                
                 // If products were submitted with edit, replace detail_pesanan rows
                 if (isset($_POST['produk']) && is_array($_POST['produk'])) {
-                    // remove existing items
+                    // Delete existing items
                     $del_stmt = $koneksi->prepare("DELETE FROM detail_pesanan WHERE noPesanan = ?");
+                    if (!$del_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
+                    
                     $del_stmt->bind_param('s', $noPesanan);
-                    $del_stmt->execute();
+                    if (!$del_stmt->execute()) throw new Exception("Delete detail failed: " . $del_stmt->error);
                     $del_stmt->close();
 
+                    // Insert new items
                     $produk_arr = $_POST['produk'];
                     $jumlah_arr = $_POST['jumlah'] ?? [];
+                    $detail_seq = 1;
+                    
+                    foreach ($produk_arr as $i => $idProduk) {
+                        $idProduk = trim($idProduk);
+                        $jumlah = intval($jumlah_arr[$i] ?? 0);
+                        
+                        if (empty($idProduk) || $jumlah <= 0) continue;
 
-                    // insert new items
-                    $seq_query = "SELECT COUNT(*) as cnt FROM detail_pesanan WHERE noPesanan = ?";
-                    $seq_stmt = $koneksi->prepare($seq_query);
-                    $seq_stmt->bind_param('s', $noPesanan);
-                    $seq_stmt->execute();
-                    $seq_row = $seq_stmt->get_result()->fetch_assoc();
-                    $base_seq = intval($seq_row['cnt']);
-                    $seq_stmt->close();
-
-                    $insert_detail_query = "INSERT INTO detail_pesanan (idDetail, jumlah, hargaSatuan, totalHarga, noPesanan, idProduk) VALUES (?, ?, ?, ?, ?, ?)";
-                    $insert_detail_stmt = $koneksi->prepare($insert_detail_query);
-
-                    for ($i = 0; $i < count($produk_arr); $i++) {
-                        $idProduk = trim($produk_arr[$i]);
-                        $qty = intval($jumlah_arr[$i] ?? 0);
-                        if (empty($idProduk) || $qty <= 0) continue;
-
-                        // Normalize idProduk similar to create flow
-                        $hargaSatuan = null;
-                        $check_q = "SELECT idProduk, harga FROM produk WHERE idProduk = ?";
-                        $check_stmt = $koneksi->prepare($check_q);
-                        $check_stmt->bind_param('s', $idProduk);
-                        $check_stmt->execute();
-                        $check_res = $check_stmt->get_result();
-                        if ($check_res->num_rows === 0) {
-                            $parsedName = $idProduk;
-                            if (strpos($idProduk, '|') !== false) {
-                                $parts = explode('|', $idProduk);
-                                $parsedName = trim($parts[0]);
-                            }
-                            $search_q = "SELECT idProduk, harga FROM produk WHERE namaProduk = ? LIMIT 1";
-                            $search_stmt = $koneksi->prepare($search_q);
-                            $search_stmt->bind_param('s', $parsedName);
-                            $search_stmt->execute();
-                            $search_res = $search_stmt->get_result();
-                            if ($search_res->num_rows > 0) {
-                                $prow = $search_res->fetch_assoc();
-                                $idProduk = $prow['idProduk'];
-                                $hargaSatuan = $prow['harga'];
-                            }
-                            $search_stmt->close();
-                        } else {
-                            $prow = $check_res->fetch_assoc();
-                            $hargaSatuan = $prow['harga'];
+                        // Ambil harga dari database produk
+                        $price_query = "SELECT harga FROM produk WHERE idProduk = ?";
+                        $price_stmt = $koneksi->prepare($price_query);
+                        if (!$price_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
+                        
+                        $price_stmt->bind_param('s', $idProduk);
+                        if (!$price_stmt->execute()) throw new Exception("Execute failed: " . $price_stmt->error);
+                        
+                        $price_res = $price_stmt->get_result();
+                        if ($price_res->num_rows === 0) {
+                            $price_stmt->close();
+                            throw new Exception("Produk dengan ID $idProduk tidak ditemukan!");
                         }
-                        $check_stmt->close();
+                        
+                        $price_row = $price_res->fetch_assoc();
+                        $hargaSatuan = floatval($price_row['harga']);
+                        $price_stmt->close();
 
-                        if ($hargaSatuan === null) continue;
+                        $totalHarga = $hargaSatuan * $jumlah;
 
-                        $totalHarga = $hargaSatuan * $qty;
-
-                        $base_seq++;
-                        $seq_str = str_pad($base_seq, 2, '0', STR_PAD_LEFT);
+                        $seq_str = str_pad($detail_seq, 2, '0', STR_PAD_LEFT);
                         $idDetail = "DTL-$noPesanan-$seq_str";
 
-                        $insert_detail_stmt->bind_param('siddss', $idDetail, $qty, $hargaSatuan, $totalHarga, $noPesanan, $idProduk);
-                        $insert_detail_stmt->execute();
+                        // Insert setiap produk yang diinput
+                        $insert_detail_query = "INSERT INTO detail_pesanan (idDetail, noPesanan, idProduk, jumlah, hargaSatuan, totalHarga) VALUES (?, ?, ?, ?, ?, ?)";
+                        $insert_detail_stmt = $koneksi->prepare($insert_detail_query);
+                        $insert_detail_stmt->bind_param('sssidd', $idDetail, $noPesanan, $idProduk, $jumlah, $hargaSatuan, $totalHarga);
+                        if (!$insert_detail_stmt->execute()) throw new Exception("Insert detail failed: " . $insert_detail_stmt->error);
+                        $insert_detail_stmt->close();
+                        
+                        $detail_seq++;
                     }
-                    $insert_detail_stmt->close();
                 }
 
-                $_SESSION['success_message'] = 'Order berhasil diperbarui!';
-            } else {
-                $_SESSION['error_message'] = 'Gagal memperbarui order!';
+                // COMMIT TRANSACTION
+                $koneksi->commit();
+                $_SESSION['success_message'] = 'Pesanan berhasil diperbarui!';
+                
+            } catch (Exception $e) {
+                $koneksi->rollback();
+                $_SESSION['error_message'] = 'Gagal memperbarui pesanan: ' . $e->getMessage();
             }
-            $update_stmt->close();
         }
         $check_stmt->close();
     }
@@ -415,21 +406,35 @@ function updateDistributorSelect() {
 
 function submitOrderForm(action) {
     const form = document.getElementById('dynamicForm');
-    const formData = new FormData(form);
+    
+    // Collect form data manually to avoid duplicates
+    const formData = new FormData();
     formData.append('action', action);
-    // collect product rows if present
+    formData.append('tanggalOrder', document.getElementById('tanggalOrder').value);
+    formData.append('distributor', document.getElementById('distributor').value);
+    formData.append('status', document.getElementById('status').value);
+    
+    // Add noPesananHidden if exists (untuk edit mode)
+    const noPesananHidden = document.getElementById('noPesananHidden');
+    if (noPesananHidden) {
+        formData.append('noPesanan', noPesananHidden.value);
+    }
+    
+    // Collect product rows - hanya yang punya produk (tidak kosong)
     const productRows = document.querySelectorAll('.product-row');
     if (productRows && productRows.length > 0) {
         productRows.forEach(row => {
             const prod = row.querySelector('.prod-select');
             const qty = row.querySelector('.prod-qty');
-            if (prod && qty && prod.value) {
+            // Hanya append jika produk dipilih DAN qty > 0
+            if (prod && qty && prod.value && parseInt(qty.value) > 0) {
                 formData.append('produk[]', prod.value);
                 formData.append('jumlah[]', qty.value);
             }
         });
     }
     
+    // Submit via hidden form
     const actualForm = document.createElement('form');
     actualForm.method = 'POST';
     actualForm.action = 'index.php?page=order';
