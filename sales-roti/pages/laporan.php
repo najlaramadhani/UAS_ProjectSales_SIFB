@@ -24,57 +24,90 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $current_user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['role'] ?? 'sales';
 $bulan = isset($_GET['bulan']) ? intval($_GET['bulan']) : date('n');
 $tahun = isset($_GET['tahun']) ? intval($_GET['tahun']) : date('Y');
 
-// Total Pesanan
-$order_query = "SELECT COUNT(*) as total FROM pesanan WHERE idUser = ?";
-$order_stmt = $koneksi->prepare($order_query);
-$order_stmt->bind_param('s', $current_user_id);
+// Total Pesanan (admin: all, sales: current user)
+if ($user_role === 'admin') {
+    $order_query = "SELECT COUNT(*) as total FROM pesanan";
+    $order_stmt = $koneksi->prepare($order_query);
+} else {
+    $order_query = "SELECT COUNT(*) as total FROM pesanan WHERE idUser = ?";
+    $order_stmt = $koneksi->prepare($order_query);
+    $order_stmt->bind_param('s', $current_user_id);
+}
 $order_stmt->execute();
 $order_result = $order_stmt->get_result()->fetch_assoc();
 $order_total = $order_result['total'] ?? 0;
 $order_stmt->close();
 
 // Total Pengiriman
-$delivery_query = "SELECT COUNT(*) as total FROM pengiriman WHERE idUser = ?";
-$delivery_stmt = $koneksi->prepare($delivery_query);
-$delivery_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $delivery_query = "SELECT COUNT(*) as total FROM pengiriman";
+    $delivery_stmt = $koneksi->prepare($delivery_query);
+} else {
+    $delivery_query = "SELECT COUNT(*) as total FROM pengiriman WHERE idUser = ?";
+    $delivery_stmt = $koneksi->prepare($delivery_query);
+    $delivery_stmt->bind_param('s', $current_user_id);
+}
 $delivery_stmt->execute();
 $delivery_total = $delivery_stmt->get_result()->fetch_assoc()['total'];
 $delivery_stmt->close();
 
 // Total Distributor
-$distributor_query = "SELECT COUNT(DISTINCT d.noDistributor) as total FROM distributor d 
-                    JOIN pesanan p ON d.noDistributor = p.noDistributor 
-                    WHERE p.idUser = ?";
-$distributor_stmt = $koneksi->prepare($distributor_query);
-$distributor_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $distributor_query = "SELECT COUNT(DISTINCT d.noDistributor) as total FROM distributor d 
+                        JOIN pesanan p ON d.noDistributor = p.noDistributor";
+    $distributor_stmt = $koneksi->prepare($distributor_query);
+} else {
+    $distributor_query = "SELECT COUNT(DISTINCT d.noDistributor) as total FROM distributor d 
+                        JOIN pesanan p ON d.noDistributor = p.noDistributor 
+                        WHERE p.idUser = ?";
+    $distributor_stmt = $koneksi->prepare($distributor_query);
+    $distributor_stmt->bind_param('s', $current_user_id);
+}
 $distributor_stmt->execute();
 $distributor_total = $distributor_stmt->get_result()->fetch_assoc()['total'];
 $distributor_stmt->close();
 
-// Total Revenue (SUM of detail_pesanan totalHarga)
-$revenue_query = "SELECT SUM(dp.totalHarga) as total_revenue FROM detail_pesanan dp 
-                 JOIN pesanan p ON dp.noPesanan = p.noPesanan 
-                 WHERE p.idUser = ?";
-$revenue_stmt = $koneksi->prepare($revenue_query);
-$revenue_stmt->bind_param('s', $current_user_id);
+// Total Revenue
+if ($user_role === 'admin') {
+    $revenue_query = "SELECT SUM(dp.totalHarga) as total_revenue FROM detail_pesanan dp 
+                     JOIN pesanan p ON dp.noPesanan = p.noPesanan";
+    $revenue_stmt = $koneksi->prepare($revenue_query);
+} else {
+    $revenue_query = "SELECT SUM(dp.totalHarga) as total_revenue FROM detail_pesanan dp 
+                     JOIN pesanan p ON dp.noPesanan = p.noPesanan 
+                     WHERE p.idUser = ?";
+    $revenue_stmt = $koneksi->prepare($revenue_query);
+    $revenue_stmt->bind_param('s', $current_user_id);
+}
 $revenue_stmt->execute();
 $revenue_row = $revenue_stmt->get_result()->fetch_assoc();
 $total_revenue = $revenue_row['total_revenue'] ?? 0;
 $revenue_stmt->close();
 
 // Top Distributors Report
-$top_dist_query = "SELECT d.namaDistributor, COUNT(p.noPesanan) as order_count, SUM(dp.totalHarga) as revenue
-                  FROM distributor d 
-                  JOIN pesanan p ON d.noDistributor = p.noDistributor 
-                  LEFT JOIN detail_pesanan dp ON p.noPesanan = dp.noPesanan 
-                  WHERE p.idUser = ? 
-                  GROUP BY d.namaDistributor 
-                  ORDER BY revenue DESC LIMIT 10";
-$top_dist_stmt = $koneksi->prepare($top_dist_query);
-$top_dist_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $top_dist_query = "SELECT d.namaDistributor, COUNT(p.noPesanan) as order_count, SUM(dp.totalHarga) as revenue
+                      FROM distributor d 
+                      JOIN pesanan p ON d.noDistributor = p.noDistributor 
+                      LEFT JOIN detail_pesanan dp ON p.noPesanan = dp.noPesanan 
+                      GROUP BY d.namaDistributor 
+                      ORDER BY revenue DESC LIMIT 10";
+    $top_dist_stmt = $koneksi->prepare($top_dist_query);
+} else {
+    $top_dist_query = "SELECT d.namaDistributor, COUNT(p.noPesanan) as order_count, SUM(dp.totalHarga) as revenue
+                      FROM distributor d 
+                      JOIN pesanan p ON d.noDistributor = p.noDistributor 
+                      LEFT JOIN detail_pesanan dp ON p.noPesanan = dp.noPesanan 
+                      WHERE p.idUser = ? 
+                      GROUP BY d.namaDistributor 
+                      ORDER BY revenue DESC LIMIT 10";
+    $top_dist_stmt = $koneksi->prepare($top_dist_query);
+    $top_dist_stmt->bind_param('s', $current_user_id);
+}
 $top_dist_stmt->execute();
 $top_distributors = $top_dist_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $top_dist_stmt->close();

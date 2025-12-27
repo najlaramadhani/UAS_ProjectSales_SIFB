@@ -256,22 +256,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
 }
 
-// READ - Get orders for current user
-$query = "SELECT p.noPesanan, p.tanggalOrder, p.status, d.namaDistributor, d.noDistributor FROM pesanan p 
-          JOIN distributor d ON p.noDistributor = d.noDistributor 
-          WHERE p.idUser = ? ORDER BY p.tanggalOrder DESC";
-$stmt = $koneksi->prepare($query);
-$stmt->bind_param('s', $current_user_id);
-$stmt->execute();
+// READ - Get orders (all for admin, only current user's for sales)
+$user_role = $_SESSION['role'] ?? 'sales';
+if ($user_role === 'admin') {
+    // Admin: lihat semua orders
+    $query = "SELECT p.noPesanan, p.tanggalOrder, p.status, d.namaDistributor, d.noDistributor, u.nama as user_name FROM pesanan p 
+              JOIN distributor d ON p.noDistributor = d.noDistributor 
+              JOIN user u ON p.idUser = u.idUser
+              ORDER BY p.tanggalOrder DESC";
+    $stmt = $koneksi->prepare($query);
+    $stmt->execute();
+} else {
+    // Sales: hanya lihat order mereka sendiri
+    $query = "SELECT p.noPesanan, p.tanggalOrder, p.status, d.namaDistributor, d.noDistributor, u.nama as user_name FROM pesanan p 
+              JOIN distributor d ON p.noDistributor = d.noDistributor 
+              JOIN user u ON p.idUser = u.idUser
+              WHERE p.idUser = ? ORDER BY p.tanggalOrder DESC";
+    $stmt = $koneksi->prepare($query);
+    $stmt->bind_param('s', $current_user_id);
+    $stmt->execute();
+}
+
 $result = $stmt->get_result();
 $orders = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
 // Get distributors for form dropdown
-$dist_query = "SELECT noDistributor, namaDistributor FROM distributor WHERE idUser = ? ORDER BY namaDistributor";
-$dist_stmt = $koneksi->prepare($dist_query);
-$dist_stmt->bind_param('s', $current_user_id);
-$dist_stmt->execute();
+if ($user_role === 'admin') {
+    // Admin: lihat semua distributor
+    $dist_query = "SELECT noDistributor, namaDistributor FROM distributor ORDER BY namaDistributor";
+    $dist_stmt = $koneksi->prepare($dist_query);
+    $dist_stmt->execute();
+} else {
+    // Sales: hanya distributor mereka
+    $dist_query = "SELECT noDistributor, namaDistributor FROM distributor WHERE idUser = ? ORDER BY namaDistributor";
+    $dist_stmt = $koneksi->prepare($dist_query);
+    $dist_stmt->bind_param('s', $current_user_id);
+    $dist_stmt->execute();
+}
 $dist_result = $dist_stmt->get_result();
 $distributors = $dist_result->fetch_all(MYSQLI_ASSOC);
 $dist_stmt->close();

@@ -78,49 +78,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <link rel="stylesheet" href="assets/css/style.css">
     <style>
         /* Login Page Specific Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         .login-page {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #4a90e2 0%, #2e5c99 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-page::before {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            top: -250px;
+            left: -250px;
+        }
+
+        .login-page::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            bottom: -200px;
+            right: -200px;
         }
 
         .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 50px 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
+            position: relative;
+            z-index: 1;
         }
 
         .login-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
+        }
+
+        .login-icon {
+            font-size: 60px;
+            display: block;
+            margin-bottom: 16px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
         }
 
         .login-header h1 {
-            font-size: 28px;
+            font-size: 32px;
             color: #2c3e50;
-            margin: 10px 0;
-        }
-
-        .login-header .login-icon {
-            font-size: 40px;
-            display: block;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            font-weight: 700;
         }
 
         .login-header p {
             color: #7f8c8d;
-            font-size: 14px;
+            font-size: 15px;
+            letter-spacing: 0.5px;
         }
 
         .login-form {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 18px;
         }
 
         .form-group {
@@ -131,88 +173,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
         .form-group label {
             font-weight: 600;
             color: #2c3e50;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             font-size: 14px;
+            letter-spacing: 0.3px;
         }
 
         .form-group input {
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
             font-size: 14px;
             transition: all 0.3s ease;
+            background: #f8f9fa;
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: #4a90e2;
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
         }
 
         .form-error {
             background: #fee;
             color: #c33;
-            padding: 12px;
-            border-radius: 6px;
+            padding: 14px;
+            border-radius: 10px;
             font-size: 14px;
             text-align: center;
             border-left: 4px solid #e74c3c;
+            margin-bottom: 16px;
+            animation: slideDown 0.3s ease;
         }
 
-        .form-success {
-            background: #efe;
-            color: #3c3;
-            padding: 12px;
-            border-radius: 6px;
-            font-size: 14px;
-            text-align: center;
-            border-left: 4px solid #27ae60;
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .btn-login {
-            background: #4a90e2;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 11px;
+            padding: 13px;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin-top: 10px;
+            margin-top: 8px;
+            letter-spacing: 0.5px;
         }
 
         .btn-login:hover {
-            background: #2e5c99;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
         }
 
         .login-footer {
             text-align: center;
-            margin-top: 20px;
-            font-size: 13px;
-            color: #7f8c8d;
-        }
-
-        .demo-info {
-            background: #f0f8ff;
-            padding: 12px;
-            border-radius: 6px;
-            margin-top: 20px;
+            margin-top: 28px;
             font-size: 12px;
-            border-left: 4px solid #3498db;
-        }
-
-        .demo-info strong {
-            display: block;
-            color: #2c3e50;
-            margin-bottom: 6px;
-        }
-
-        .demo-info p {
-            color: #34495e;
-            margin: 4px 0;
+            color: #95a5a6;
+            letter-spacing: 0.5px;
         }
     </style>
 </head>
@@ -242,13 +275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
                 <button type="submit" name="login" class="btn-login">Login</button>
             </form>
-
-            <div class="demo-info">
-                <strong>Demo Account:</strong>
-                <p>Username: <code>salesnajla</code></p>
-                <p>Password: <code>najla10</code></p>
-                <p>Role: Sales</p>
-            </div>
 
             <div class="login-footer">
                 <p>&copy; 2025 Sales Dashboard | UAS Project</p>

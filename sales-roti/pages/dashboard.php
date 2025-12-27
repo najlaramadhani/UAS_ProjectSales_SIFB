@@ -15,52 +15,84 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $current_user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['role'] ?? 'sales';
 
-// Get total orders
-$order_query = "SELECT COUNT(*) as total FROM pesanan WHERE idUser = ?";
-$order_stmt = $koneksi->prepare($order_query);
-$order_stmt->bind_param('s', $current_user_id);
+// Get total orders (admin: all, sales: current user)
+if ($user_role === 'admin') {
+    $order_query = "SELECT COUNT(*) as total FROM pesanan";
+    $order_stmt = $koneksi->prepare($order_query);
+} else {
+    $order_query = "SELECT COUNT(*) as total FROM pesanan WHERE idUser = ?";
+    $order_stmt = $koneksi->prepare($order_query);
+    $order_stmt->bind_param('s', $current_user_id);
+}
 $order_stmt->execute();
 $order_total = $order_stmt->get_result()->fetch_assoc()['total'];
 $order_stmt->close();
 
 // Get total distributors
-$dist_query = "SELECT COUNT(*) as total FROM distributor WHERE idUser = ?";
-$dist_stmt = $koneksi->prepare($dist_query);
-$dist_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $dist_query = "SELECT COUNT(*) as total FROM distributor";
+    $dist_stmt = $koneksi->prepare($dist_query);
+} else {
+    $dist_query = "SELECT COUNT(*) as total FROM distributor WHERE idUser = ?";
+    $dist_stmt = $koneksi->prepare($dist_query);
+    $dist_stmt->bind_param('s', $current_user_id);
+}
 $dist_stmt->execute();
 $dist_total = $dist_stmt->get_result()->fetch_assoc()['total'];
 $dist_stmt->close();
 
 // Get pending deliveries
-$pending_query = "SELECT COUNT(*) as total FROM pengiriman WHERE idUser = ? AND statusPengiriman = 'Pending'";
-$pending_stmt = $koneksi->prepare($pending_query);
-$pending_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $pending_query = "SELECT COUNT(*) as total FROM pengiriman WHERE statusPengiriman = 'Pending'";
+    $pending_stmt = $koneksi->prepare($pending_query);
+} else {
+    $pending_query = "SELECT COUNT(*) as total FROM pengiriman WHERE idUser = ? AND statusPengiriman = 'Pending'";
+    $pending_stmt = $koneksi->prepare($pending_query);
+    $pending_stmt->bind_param('s', $current_user_id);
+}
 $pending_stmt->execute();
 $pending_total = $pending_stmt->get_result()->fetch_assoc()['total'];
 $pending_stmt->close();
 
 // Get total revenue
-$revenue_query = "SELECT SUM(dp.totalHarga) as total FROM detail_pesanan dp 
-                 JOIN pesanan p ON dp.noPesanan = p.noPesanan 
-                 WHERE p.idUser = ?";
-$revenue_stmt = $koneksi->prepare($revenue_query);
-$revenue_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $revenue_query = "SELECT SUM(dp.totalHarga) as total FROM detail_pesanan dp 
+                     JOIN pesanan p ON dp.noPesanan = p.noPesanan";
+    $revenue_stmt = $koneksi->prepare($revenue_query);
+} else {
+    $revenue_query = "SELECT SUM(dp.totalHarga) as total FROM detail_pesanan dp 
+                     JOIN pesanan p ON dp.noPesanan = p.noPesanan 
+                     WHERE p.idUser = ?";
+    $revenue_stmt = $koneksi->prepare($revenue_query);
+    $revenue_stmt->bind_param('s', $current_user_id);
+}
 $revenue_stmt->execute();
 $revenue_row = $revenue_stmt->get_result()->fetch_assoc();
 $total_revenue = $revenue_row['total'] ?? 0;
 $revenue_stmt->close();
 
 // Get top selling products
-$product_query = "SELECT pr.namaProduk, SUM(dp.jumlah) as total_qty, SUM(dp.totalHarga) as total_revenue
-                 FROM detail_pesanan dp 
-                 JOIN produk pr ON dp.idProduk = pr.idProduk
-                 JOIN pesanan p ON dp.noPesanan = p.noPesanan
-                 WHERE p.idUser = ?
-                 GROUP BY pr.namaProduk
-                 ORDER BY total_revenue DESC LIMIT 5";
-$product_stmt = $koneksi->prepare($product_query);
-$product_stmt->bind_param('s', $current_user_id);
+if ($user_role === 'admin') {
+    $product_query = "SELECT pr.namaProduk, SUM(dp.jumlah) as total_qty, SUM(dp.totalHarga) as total_revenue
+                     FROM detail_pesanan dp 
+                     JOIN produk pr ON dp.idProduk = pr.idProduk
+                     JOIN pesanan p ON dp.noPesanan = p.noPesanan
+                     GROUP BY pr.namaProduk
+                     ORDER BY total_revenue DESC LIMIT 5";
+    $product_stmt = $koneksi->prepare($product_query);
+} else {
+    $product_query = "SELECT pr.namaProduk, SUM(dp.jumlah) as total_qty, SUM(dp.totalHarga) as total_revenue
+                     FROM detail_pesanan dp 
+                     JOIN produk pr ON dp.idProduk = pr.idProduk
+                     JOIN pesanan p ON dp.noPesanan = p.noPesanan
+                     WHERE p.idUser = ?
+                     GROUP BY pr.namaProduk
+                     ORDER BY total_revenue DESC LIMIT 5";
+    $product_stmt = $koneksi->prepare($product_query);
+    $product_stmt->bind_param('s', $current_user_id);
+}
 $product_stmt->execute();
 $top_products = $product_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $product_stmt->close();
@@ -74,13 +106,23 @@ foreach ($top_products as $tp) {
 }
 
 // Get recent orders
-$recent_query = "SELECT p.noPesanan, p.tanggalOrder, d.namaDistributor, p.status 
-                FROM pesanan p 
-                JOIN distributor d ON p.noDistributor = d.noDistributor 
-                WHERE p.idUser = ? 
-                ORDER BY p.tanggalOrder DESC LIMIT 5";
-$recent_stmt = $koneksi->prepare($recent_query);
-$recent_stmt->bind_param('s', $current_user_id);
+$user_role = $_SESSION['role'] ?? 'sales';
+if ($user_role === 'admin') {
+    $recent_query = "SELECT p.noPesanan, p.tanggalOrder, d.namaDistributor, p.status, u.nama as user_name
+                    FROM pesanan p 
+                    JOIN distributor d ON p.noDistributor = d.noDistributor 
+                    JOIN user u ON p.idUser = u.idUser
+                    ORDER BY p.tanggalOrder DESC LIMIT 5";
+    $recent_stmt = $koneksi->prepare($recent_query);
+} else {
+    $recent_query = "SELECT p.noPesanan, p.tanggalOrder, d.namaDistributor, p.status 
+                    FROM pesanan p 
+                    JOIN distributor d ON p.noDistributor = d.noDistributor 
+                    WHERE p.idUser = ? 
+                    ORDER BY p.tanggalOrder DESC LIMIT 5";
+    $recent_stmt = $koneksi->prepare($recent_query);
+    $recent_stmt->bind_param('s', $current_user_id);
+}
 $recent_stmt->execute();
 $recent_orders = $recent_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $recent_stmt->close();
@@ -174,6 +216,9 @@ $recent_stmt->close();
             <tr>
                 <th>No Order</th>
                 <th>Tanggal</th>
+                <?php if ($_SESSION['role'] === 'admin'): ?>
+                    <th>Salesman</th>
+                <?php endif; ?>
                 <th>Distributor</th>
                 <th>Status</th>
                 <th>Action</th>
@@ -182,13 +227,16 @@ $recent_stmt->close();
         <tbody>
             <?php if (empty($recent_orders)): ?>
                 <tr>
-                    <td colspan="5" style="text-align: center; color: #999;">Belum ada order</td>
+                    <td colspan="<?php echo $_SESSION['role'] === 'admin' ? '6' : '5'; ?>" style="text-align: center; color: #999;">Belum ada order</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($recent_orders as $order): ?>
                     <tr>
                         <td><strong><?php echo htmlspecialchars($order['noPesanan']); ?></strong></td>
                         <td><?php echo date('d M Y', strtotime($order['tanggalOrder'])); ?></td>
+                        <?php if ($_SESSION['role'] === 'admin'): ?>
+                            <td><?php echo htmlspecialchars($order['user_name'] ?? '-'); ?></td>
+                        <?php endif; ?>
                         <td><?php echo htmlspecialchars($order['namaDistributor']); ?></td>
                         <td>
                             <span class="badge badge-<?php 
