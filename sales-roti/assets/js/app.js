@@ -269,6 +269,56 @@ function loadFormContent(container, formType, id) {
                 </div>
             `;
             break;
+
+        case 'userForm':
+            formHTML = `
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Username (unik)" required>
+                </div>
+                <div class="form-group">
+                    <label for="nama">Nama Lengkap</label>
+                    <input type="text" id="nama" name="nama" placeholder="Nama lengkap" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="Email" required>
+                </div>
+                <div class="form-group">
+                    <label id="passwordLabel" for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Password (kosongkan jika tidak mengubah)" style="display:none;">
+                </div>
+                <div class="form-group">
+                    <label for="role">Role</label>
+                    <select id="role" name="role" required>
+                        <option value="sales">Sales</option>
+                        <option value="admin">Admin</option>
+                        <option value="driver">Driver</option>
+                    </select>
+                </div>
+            `;
+            break;
+
+        case 'produkForm':
+            formHTML = `
+                <div class="form-group">
+                    <label for="namaProduk">Nama Produk</label>
+                    <input type="text" id="namaProduk" name="namaProduk" placeholder="Nama produk" required>
+                </div>
+                <div class="form-group">
+                    <label for="harga">Harga (Rp)</label>
+                    <input type="number" id="harga" name="harga" placeholder="Harga produk" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="stok">Stok</label>
+                    <input type="number" id="stok" name="stok" placeholder="Jumlah stok" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="deskripsi">Deskripsi</label>
+                    <textarea id="deskripsi" name="deskripsi" placeholder="Deskripsi produk (opsional)" rows="3"></textarea>
+                </div>
+            `;
+            break;
             
         default:
             formHTML = '<p>Form tidak ditemukan</p>';

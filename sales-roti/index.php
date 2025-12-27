@@ -32,10 +32,26 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
 
 // Determine current page
 $page = isset($_GET['page']) ? trim($_GET['page']) : 'dashboard';
-$allowed_pages = ['dashboard', 'order', 'distributor', 'pengiriman', 'laporan', 'detail_pesanan'];
+$user_role = $_SESSION['role'] ?? 'sales';
 
+// Define allowed pages based on role
+$allowed_pages_all = ['dashboard', 'order', 'distributor', 'pengiriman', 'laporan', 'detail_pesanan'];
+$allowed_pages_admin = ['dashboard', 'order', 'distributor', 'pengiriman', 'laporan', 'detail_pesanan', 'produk', 'user'];
+
+// Set allowed pages based on role
+$allowed_pages = ($user_role === 'admin') ? $allowed_pages_admin : $allowed_pages_all;
+
+// Access control: block unauthorized pages
 if (!in_array($page, $allowed_pages)) {
-    $page = 'dashboard';
+    // Redirect to dashboard if page not allowed
+    header('Location: index.php?page=dashboard');
+    exit;
+}
+
+// Additional security: block admin-only pages for non-admin users
+if (in_array($page, ['produk', 'user']) && $user_role !== 'admin') {
+    header('Location: index.php?page=dashboard');
+    exit;
 }
 
 // Store page in global for sidebar active state
