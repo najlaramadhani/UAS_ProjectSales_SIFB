@@ -57,15 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $_SESSION['error_message'] = 'Semua field harus diisi!';
     } else {
         if ($action === 'tambah') {
-            // Generate pengiriman ID
-            $dateStr = str_replace('-', '', $tanggalKirim);
-            $id_query = "SELECT COUNT(*) as cnt FROM pengiriman WHERE noPengiriman LIKE 'PG$dateStr%'";
-            $id_result = $koneksi->query($id_query);
-            $id_row = $id_result->fetch_assoc();
-            $next_seq = str_pad($id_row['cnt'] + 1, 3, '0', STR_PAD_LEFT);
-            $noPengiriman = 'PG' . $dateStr . $next_seq;
-            
-            // Get order info to get distributor
+            // Generate pengiriman ID: DO-SO[orderid]-01
+            // Get order info to get distributor and noPesanan
             $order_query = "SELECT noDistributor FROM pesanan WHERE noPesanan = ? AND idUser = ?";
             $order_stmt = $koneksi->prepare($order_query);
             $order_stmt->bind_param('ss', $noPesanan, $current_user_id);
@@ -77,6 +70,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             } else {
                 $order_row = $order_result->fetch_assoc();
                 $noDistributor = $order_row['noDistributor'];
+                
+                // Generate ID: count existing pengiriman for this order
+                $id_query = "SELECT COUNT(*) as cnt FROM pengiriman WHERE noPesanan = ?";
+                $id_stmt = $koneksi->prepare($id_query);
+                $id_stmt->bind_param('s', $noPesanan);
+                $id_stmt->execute();
+                $id_row = $id_stmt->get_result()->fetch_assoc();
+                $next_seq = str_pad($id_row['cnt'] + 1, 2, '0', STR_PAD_LEFT);
+                $noPengiriman = 'DO-' . $noPesanan . '-' . $next_seq;
+                $id_stmt->close();
                 
                 $insert_query = "INSERT INTO pengiriman (noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan, noDistributor, idDriver, idUser) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 $insert_stmt = $koneksi->prepare($insert_query);
@@ -120,24 +123,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
 }
 
-// READ - Get pengiriman for current user
-$query = "SELECT p.noPengiriman, p.noSuratJalan, p.tanggalKirim, p.alamatPengiriman, p.statusPengiriman, p.noPesanan, p.idDriver, d.namaDistributor 
-          FROM pengiriman p 
-          JOIN distributor d ON p.noDistributor = d.noDistributor 
-          WHERE p.idUser = ? ORDER BY p.tanggalKirim DESC";
-$stmt = $koneksi->prepare($query);
-$stmt->bind_param('s', $current_user_id);
-$stmt->execute();
+// READ - Get pengiriman (all for admin, current user's for sales)
+$user_role = $_SESSION['role'] ?? 'sales';
+if ($user_role === 'admin') {
+    // Admin: lihat semua pengiriman
+    $query = "SELECT p.noPengiriman, p.noSuratJalan, p.tanggalKirim, p.alamatPengiriman, p.statusPengiriman, p.noPesanan, p.idDriver, d.namaDistributor, u.nama as user_name
+              FROM pengiriman p 
+              JOIN distributor d ON p.noDistributor = d.noDistributor 
+              JOIN user u ON p.idUser = u.idUser
+              ORDER BY p.tanggalKirim DESC";
+    $stmt = $koneksi->prepare($query);
+    $stmt->execute();
+} else {
+    // Sales: hanya pengiriman mereka
+    $query = "SELECT p.noPengiriman, p.noSuratJalan, p.tanggalKirim, p.alamatPengiriman, p.statusPengiriman, p.noPesanan, p.idDriver, d.namaDistributor 
+              FROM pengiriman p 
+              JOIN distributor d ON p.noDistributor = d.noDistributor 
+              WHERE p.idUser = ? ORDER BY p.tanggalKirim DESC";
+    $stmt = $koneksi->prepare($query);
+    $stmt->bind_param('s', $current_user_id);
+    $stmt->execute();
+}
 $pengiriman_list = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
 // Get orders for dropdown
-$order_query = "SELECT DISTINCT p.noPesanan, d.namaDistributor FROM pesanan p 
-               JOIN distributor d ON p.noDistributor = d.noDistributor 
-               WHERE p.idUser = ? ORDER BY p.noPesanan DESC";
-$order_stmt = $koneksi->prepare($order_query);
-$order_stmt->bind_param('s', $current_user_id);
-$order_stmt->execute();
+if ($user_role === 'admin') {
+    // Admin: lihat semua orders
+    $order_query = "SELECT DISTINCT p.noPesanan, d.namaDistributor FROM pesanan p 
+                   JOIN distributor d ON p.noDistributor = d.noDistributor 
+                   ORDER BY p.noPesanan DESC";
+    $order_stmt = $koneksi->prepare($order_query);
+    $order_stmt->execute();
+} else {
+    // Sales: hanya orders mereka
+    $order_query = "SELECT DISTINCT p.noPesanan, d.namaDistributor FROM pesanan p 
+                   JOIN distributor d ON p.noDistributor = d.noDistributor 
+                   WHERE p.idUser = ? ORDER BY p.noPesanan DESC";
+    $order_stmt = $koneksi->prepare($order_query);
+    $order_stmt->bind_param('s', $current_user_id);
+    $order_stmt->execute();
+}
 $orders = $order_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $order_stmt->close();
 

@@ -213,6 +213,22 @@ body {
     font-size: 1.5rem;
 }
 
+.nav-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 0.75rem 0;
+    list-style: none;
+}
+
+.nav-section-title {
+    font-size: 0.75rem;
+    color: var(--text-gray);
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0.5rem 1.5rem;
+    margin-top: 0.5rem;
+    list-style: none;
+}
 
 .sidebar-footer {
     border-top: 1px solid var(--border-color);
@@ -234,6 +250,12 @@ body {
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-dark);
+}
+
+.role-badge {
+    font-size: 0.8rem;
+    color: var(--text-gray);
+    margin-top: 0.5rem;
 }
 
 /* ==================== MAIN ARTICLE ==================== */
@@ -666,6 +688,25 @@ body {
     background-color: #d4f4d8;
     color: #2d8659;
     border-left: 3px solid #2d8659;
+}
+
+/* Role-specific badge colors */
+.badge-admin {
+    background-color: #fadbd8;
+    color: #922b21;
+    border-left: 3px solid #922b21;
+}
+
+.badge-sales {
+    background-color: #d6eef7;
+    color: #003d5c;
+    border-left: 3px solid #003d5c;
+}
+
+.badge-driver {
+    background-color: #fcf3cf;
+    color: #7d6608;
+    border-left: 3px solid #7d6608;
 }
 
 /* ==================== ALERTS ==================== */
