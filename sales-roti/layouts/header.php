@@ -13,6 +13,7 @@ $user_initials = implode('', array_map(fn($word) => $word[0], explode(' ', $user
                 Sales Dashboard
             </h1>
             <p class="brand-subtitle">Sistem Penjualan Roti</p>
+            <P>Indonesia</P>
         </div>
         
         <div class="header-actions">
