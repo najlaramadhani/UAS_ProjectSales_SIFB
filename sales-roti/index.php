@@ -7,6 +7,16 @@
 session_start();
 include 'config/koneksi.php';
 
+// Check if JSON request first - route to handler before session check
+$page = isset($_GET['page']) ? trim($_GET['page']) : 'dashboard';
+$is_json_request = isset($_GET['fetch']) && $_GET['fetch'] === 'json';
+
+if ($is_json_request && $page === 'detail_pesanan') {
+    // Load detail_pesanan.php which will handle JSON endpoint
+    include 'pages/detail_pesanan.php';
+    exit;
+}
+
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -80,6 +90,6 @@ $GLOBALS['page'] = $page;
         </div>
     </div>
     
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/app.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>

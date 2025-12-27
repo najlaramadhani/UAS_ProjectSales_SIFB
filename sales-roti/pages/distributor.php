@@ -207,27 +207,30 @@ function openAddDistributorModal() {
 function openEditDistributorModal(noDistributor, nama, alamat, kontak, email) {
     openModal('Edit Distributor', 'distributorForm');
     
-    document.getElementById('namaDistributor').value = nama;
-    document.getElementById('alamat').value = alamat;
-    document.getElementById('kontak').value = kontak;
-    document.getElementById('email').value = email;
-    
-    let form = document.getElementById('dynamicForm');
-    let idField = document.getElementById('noDistributorHidden');
-    
-    if (!idField) {
-        idField = document.createElement('input');
-        idField.type = 'hidden';
-        idField.id = 'noDistributorHidden';
-        idField.name = 'noDistributor';
-        form.appendChild(idField);
-    }
-    idField.value = noDistributor;
-    
-    form.onsubmit = function(e) {
-        e.preventDefault();
-        submitDistributorForm('ubah');
-    };
+    setTimeout(() => {
+        document.getElementById('noDistributor').value = noDistributor;
+        document.getElementById('namaDistributor').value = nama;
+        document.getElementById('alamat').value = alamat;
+        document.getElementById('kontak').value = kontak;
+        document.getElementById('email').value = email;
+        
+        let form = document.getElementById('dynamicForm');
+        let idField = document.getElementById('noDistributorHidden');
+        
+        if (!idField) {
+            idField = document.createElement('input');
+            idField.type = 'hidden';
+            idField.id = 'noDistributorHidden';
+            idField.name = 'noDistributor';
+            form.appendChild(idField);
+        }
+        idField.value = noDistributor;
+        
+        form.onsubmit = function(e) {
+            e.preventDefault();
+            submitDistributorForm('ubah');
+        };
+    }, 50);
 }
 
 function submitDistributorForm(action) {

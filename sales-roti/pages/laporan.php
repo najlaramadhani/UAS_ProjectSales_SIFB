@@ -9,9 +9,18 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'config/koneksi.php';
 
+// For JSON endpoint, check session but don't redirect - return JSON error instead
+$is_json_request = isset($_GET['fetch']) && $_GET['fetch'] === 'json';
+
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
+    if ($is_json_request) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized - please login']);
+        exit;
+    } else {
+        header('Location: login.php');
+        exit;
+    }
 }
 
 $current_user_id = $_SESSION['user_id'];
@@ -19,19 +28,18 @@ $bulan = isset($_GET['bulan']) ? intval($_GET['bulan']) : date('n');
 $tahun = isset($_GET['tahun']) ? intval($_GET['tahun']) : date('Y');
 
 // Total Pesanan
-$order_query = "SELECT COUNT(*) as total, SUM(1) as count FROM pesanan 
-               WHERE idUser = ? AND MONTH(tanggalOrder) = ? AND YEAR(tanggalOrder) = ?";
+$order_query = "SELECT COUNT(*) as total FROM pesanan WHERE idUser = ?";
 $order_stmt = $koneksi->prepare($order_query);
-$order_stmt->bind_param('sii', $current_user_id, $bulan, $tahun);
+$order_stmt->bind_param('s', $current_user_id);
 $order_stmt->execute();
-$order_total = $order_stmt->get_result()->fetch_assoc()['count'];
+$order_result = $order_stmt->get_result()->fetch_assoc();
+$order_total = $order_result['total'] ?? 0;
 $order_stmt->close();
 
 // Total Pengiriman
-$delivery_query = "SELECT COUNT(*) as total FROM pengiriman 
-                  WHERE idUser = ? AND MONTH(tanggalKirim) = ? AND YEAR(tanggalKirim) = ?";
+$delivery_query = "SELECT COUNT(*) as total FROM pengiriman WHERE idUser = ?";
 $delivery_stmt = $koneksi->prepare($delivery_query);
-$delivery_stmt->bind_param('sii', $current_user_id, $bulan, $tahun);
+$delivery_stmt->bind_param('s', $current_user_id);
 $delivery_stmt->execute();
 $delivery_total = $delivery_stmt->get_result()->fetch_assoc()['total'];
 $delivery_stmt->close();
@@ -39,9 +47,9 @@ $delivery_stmt->close();
 // Total Distributor
 $distributor_query = "SELECT COUNT(DISTINCT d.noDistributor) as total FROM distributor d 
                     JOIN pesanan p ON d.noDistributor = p.noDistributor 
-                    WHERE p.idUser = ? AND MONTH(p.tanggalOrder) = ? AND YEAR(p.tanggalOrder) = ?";
+                    WHERE p.idUser = ?";
 $distributor_stmt = $koneksi->prepare($distributor_query);
-$distributor_stmt->bind_param('sii', $current_user_id, $bulan, $tahun);
+$distributor_stmt->bind_param('s', $current_user_id);
 $distributor_stmt->execute();
 $distributor_total = $distributor_stmt->get_result()->fetch_assoc()['total'];
 $distributor_stmt->close();
@@ -49,42 +57,24 @@ $distributor_stmt->close();
 // Total Revenue (SUM of detail_pesanan totalHarga)
 $revenue_query = "SELECT SUM(dp.totalHarga) as total_revenue FROM detail_pesanan dp 
                  JOIN pesanan p ON dp.noPesanan = p.noPesanan 
-                 WHERE p.idUser = ? AND MONTH(p.tanggalOrder) = ? AND YEAR(p.tanggalOrder) = ?";
+                 WHERE p.idUser = ?";
 $revenue_stmt = $koneksi->prepare($revenue_query);
-$revenue_stmt->bind_param('sii', $current_user_id, $bulan, $tahun);
+$revenue_stmt->bind_param('s', $current_user_id);
 $revenue_stmt->execute();
 $revenue_row = $revenue_stmt->get_result()->fetch_assoc();
 $total_revenue = $revenue_row['total_revenue'] ?? 0;
 $revenue_stmt->close();
-
-// Pengiriman Status Breakdown
-$status_query = "SELECT statusPengiriman, COUNT(*) as count FROM pengiriman 
-                WHERE idUser = ? AND MONTH(tanggalKirim) = ? AND YEAR(tanggalKirim) = ? 
-                GROUP BY statusPengiriman";
-$status_stmt = $koneksi->prepare($status_query);
-$status_stmt->bind_param('sii', $current_user_id, $bulan, $tahun);
-$status_stmt->execute();
-$status_results = $status_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$status_stmt->close();
-
-$status_counts = ['Selesai' => 0, 'Dikirim' => 0, 'Pending' => 0];
-foreach ($status_results as $sr) {
-    $key = ucfirst($sr['statusPengiriman']);
-    if (isset($status_counts[$key])) {
-        $status_counts[$key] = $sr['count'];
-    }
-}
 
 // Top Distributors Report
 $top_dist_query = "SELECT d.namaDistributor, COUNT(p.noPesanan) as order_count, SUM(dp.totalHarga) as revenue
                   FROM distributor d 
                   JOIN pesanan p ON d.noDistributor = p.noDistributor 
                   LEFT JOIN detail_pesanan dp ON p.noPesanan = dp.noPesanan 
-                  WHERE p.idUser = ? AND MONTH(p.tanggalOrder) = ? AND YEAR(p.tanggalOrder) = ? 
+                  WHERE p.idUser = ? 
                   GROUP BY d.namaDistributor 
                   ORDER BY revenue DESC LIMIT 10";
 $top_dist_stmt = $koneksi->prepare($top_dist_query);
-$top_dist_stmt->bind_param('sii', $current_user_id, $bulan, $tahun);
+$top_dist_stmt->bind_param('s', $current_user_id);
 $top_dist_stmt->execute();
 $top_distributors = $top_dist_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $top_dist_stmt->close();
@@ -164,42 +154,6 @@ foreach ($top_distributors as $td) {
             <p class="summary-value"><?php echo $distributor_total; ?> distributor</p>
             <p class="summary-change"><?php echo date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun)); ?></p>
         </div>
-    </div>
-</div>
-
-<!-- Pengiriman Status Breakdown -->
-<div class="report-section">
-    <h3>Status Pengiriman</h3>
-    <div class="table-container">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Status</th>
-                    <th>Jumlah Pengiriman</th>
-                    <th>Persentase</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php 
-                $total_pengiriman = array_sum($status_counts);
-                foreach ($status_counts as $status => $count):
-                    $persen = $total_pengiriman > 0 ? ($count / $total_pengiriman) * 100 : 0;
-                ?>
-                    <tr>
-                        <td><strong><?php echo $status; ?></strong></td>
-                        <td><?php echo $count; ?> pengiriman</td>
-                        <td>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: <?php echo $persen; ?>%; background: <?php 
-                                    echo $status === 'Selesai' ? '#27ae60' : ($status === 'Dikirim' ? '#f39c12' : '#e74c3c'); 
-                                ?>;"></div>
-                            </div>
-                            <?php echo round($persen, 1); ?>%
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
     </div>
 </div>
 

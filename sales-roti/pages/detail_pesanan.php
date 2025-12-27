@@ -10,9 +10,20 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'config/koneksi.php';
 
+// For JSON endpoint, check session but don't redirect - return JSON error instead
+$is_json_request = isset($_GET['fetch']) && $_GET['fetch'] === 'json';
+
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'sales') {
-    header('Location: login.php');
-    exit;
+    if ($is_json_request) {
+        // Return JSON error for AJAX requests
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized - please login']);
+        exit;
+    } else {
+        // Redirect for regular page requests
+        header('Location: login.php');
+        exit;
+    }
 }
 
 $current_user_id = $_SESSION['user_id'];
@@ -131,32 +142,54 @@ $noPesanan = isset($_GET['pesanan']) ? trim($_GET['pesanan']) : '';
 
 // JSON endpoint for AJAX: return detail items for a given order
 if (isset($_GET['fetch']) && $_GET['fetch'] === 'json' && !empty($noPesanan)) {
-    // verify ownership
-    $check = "SELECT noPesanan FROM pesanan WHERE noPesanan = ? AND idUser = ?";
-    $cstmt = $koneksi->prepare($check);
-    $cstmt->bind_param('ss', $noPesanan, $current_user_id);
-    $cstmt->execute();
-    $cres = $cstmt->get_result();
-    $cstmt->close();
-
-    if ($cres->num_rows === 0) {
+    // Get order header
+    $header_query = "SELECT p.noPesanan, p.tanggalOrder, d.namaDistributor, p.status 
+                    FROM pesanan p 
+                    JOIN distributor d ON p.noDistributor = d.noDistributor 
+                    WHERE p.noPesanan = ? AND p.idUser = ?";
+    $header_stmt = $koneksi->prepare($header_query);
+    if (!$header_stmt) {
         header('Content-Type: application/json');
-        echo json_encode(['error' => 'Order not found or no permission']);
+        echo json_encode(['error' => 'Prepare header query failed: ' . $koneksi->error]);
         exit;
     }
+    
+    $header_stmt->bind_param('ss', $noPesanan, $current_user_id);
+    $header_stmt->execute();
+    $header_result = $header_stmt->get_result();
+    $header_stmt->close();
 
-        $dq = "SELECT dp.idDetail, dp.idProduk, dp.jumlah, dp.hargaSatuan, dp.totalHarga, pr.namaProduk 
+    if ($header_result->num_rows === 0) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Order not found or no permission', 'debug' => ['pesanan' => $noPesanan, 'current_user' => $current_user_id]]);
+        exit;
+    }
+    
+    $order_header = $header_result->fetch_assoc();
+
+    // Get detail items
+    $dq = "SELECT dp.idDetail, dp.idProduk, dp.jumlah, dp.hargaSatuan, dp.totalHarga, pr.namaProduk 
             FROM detail_pesanan dp LEFT JOIN produk pr ON dp.idProduk = pr.idProduk 
             WHERE dp.noPesanan = ? ORDER BY dp.idDetail";
     $dstmt = $koneksi->prepare($dq);
+    if (!$dstmt) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Prepare detail query failed: ' . $koneksi->error]);
+        exit;
+    }
+    
     $dstmt->bind_param('s', $noPesanan);
     $dstmt->execute();
     $dres = $dstmt->get_result();
     $items = $dres->fetch_all(MYSQLI_ASSOC);
     $dstmt->close();
 
+    // Return both header and items
     header('Content-Type: application/json');
-    echo json_encode($items);
+    echo json_encode([
+        'header' => $order_header,
+        'items' => $items
+    ]);
     exit;
 }
 

@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $statusPengiriman = trim($_POST['statusPengiriman'] ?? 'Pending');
     $noPesanan = trim($_POST['noPesanan'] ?? '');
     $noDistributor = trim($_POST['noDistributor'] ?? '');
+    $idDriver = trim($_POST['idDriver'] ?? '');
     
     if (empty($noSuratJalan) || empty($tanggalKirim) || empty($alamatPengiriman) || empty($noPesanan)) {
         $_SESSION['error_message'] = 'Semua field harus diisi!';
@@ -77,9 +78,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $order_row = $order_result->fetch_assoc();
                 $noDistributor = $order_row['noDistributor'];
                 
-                $insert_query = "INSERT INTO pengiriman (noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan, noDistributor, idUser) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                $insert_query = "INSERT INTO pengiriman (noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan, noDistributor, idDriver, idUser) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 $insert_stmt = $koneksi->prepare($insert_query);
-                $insert_stmt->bind_param('ssssssss', $noPengiriman, $noSuratJalan, $tanggalKirim, $alamatPengiriman, $statusPengiriman, $noPesanan, $noDistributor, $current_user_id);
+                $idDriverVal = !empty($idDriver) ? $idDriver : NULL;
+                $insert_stmt->bind_param('sssssssss', $noPengiriman, $noSuratJalan, $tanggalKirim, $alamatPengiriman, $statusPengiriman, $noPesanan, $noDistributor, $idDriverVal, $current_user_id);
                 
                 if ($insert_stmt->execute()) {
                     $_SESSION['success_message'] = 'Pengiriman berhasil ditambahkan!';
@@ -98,9 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $check_stmt->execute();
             
             if ($check_stmt->get_result()->num_rows > 0) {
-                $update_query = "UPDATE pengiriman SET noSuratJalan = ?, tanggalKirim = ?, alamatPengiriman = ?, statusPengiriman = ? WHERE noPengiriman = ?";
+                $update_query = "UPDATE pengiriman SET noSuratJalan = ?, tanggalKirim = ?, alamatPengiriman = ?, statusPengiriman = ?, idDriver = ? WHERE noPengiriman = ?";
                 $update_stmt = $koneksi->prepare($update_query);
-                $update_stmt->bind_param('sssss', $noSuratJalan, $tanggalKirim, $alamatPengiriman, $statusPengiriman, $noPengiriman);
+                $idDriverVal = !empty($idDriver) ? $idDriver : NULL;
+                $update_stmt->bind_param('ssssss', $noSuratJalan, $tanggalKirim, $alamatPengiriman, $statusPengiriman, $idDriverVal, $noPengiriman);
                 
                 if ($update_stmt->execute()) {
                     $_SESSION['success_message'] = 'Pengiriman berhasil diperbarui!';
@@ -118,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // READ - Get pengiriman for current user
-$query = "SELECT p.noPengiriman, p.noSuratJalan, p.tanggalKirim, p.alamatPengiriman, p.statusPengiriman, p.noPesanan, d.namaDistributor 
+$query = "SELECT p.noPengiriman, p.noSuratJalan, p.tanggalKirim, p.alamatPengiriman, p.statusPengiriman, p.noPesanan, p.idDriver, d.namaDistributor 
           FROM pengiriman p 
           JOIN distributor d ON p.noDistributor = d.noDistributor 
           WHERE p.idUser = ? ORDER BY p.tanggalKirim DESC";
@@ -137,6 +140,13 @@ $order_stmt->bind_param('s', $current_user_id);
 $order_stmt->execute();
 $orders = $order_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $order_stmt->close();
+
+// Get drivers for dropdown (users with role='driver')
+$driver_query = "SELECT idUser, nama, email FROM user WHERE role = 'driver' ORDER BY nama";
+$driver_stmt = $koneksi->prepare($driver_query);
+$driver_stmt->execute();
+$drivers = $driver_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$driver_stmt->close();
 
 // Calculate status counts
 $status_counts = ['Pending' => 0, 'Dikirim' => 0, 'Selesai' => 0];
@@ -170,40 +180,6 @@ if (isset($_SESSION['error_message'])) {
     </button>
 </div>
 
-<div class="table-container">
-    <table class="table">
-        <thead>
-            <tr>
-                <th style="width: 15%;">No Pengiriman</th>
-                <th style="width: 15%;">No Surat Jalan</th>
-                <th style="width: 15%;">Tanggal Kirim</th>
-                <th style="width: 25%;">Alamat Pengiriman</th>
-                <th style="width: 15%;">Status</th>
-                <th style="width: 30%;">Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (empty($pengiriman_list)): ?>
-                <tr><td colspan="6" style="text-align:center;color:#999;">Belum ada pengiriman</td></tr>
-            <?php else: ?>
-                <?php foreach ($pengiriman_list as $pg): ?>
-                    <tr>
-                        <td><strong><?php echo htmlspecialchars($pg['noPengiriman']); ?></strong></td>
-                        <td><?php echo htmlspecialchars($pg['noSuratJalan']); ?></td>
-                        <td><?php echo date('d M Y', strtotime($pg['tanggalKirim'])); ?></td>
-                        <td><?php echo htmlspecialchars($pg['alamatPengiriman']); ?></td>
-                        <td><span class="badge badge-<?php echo strtolower(str_replace(' ', '', $pg['statusPengiriman'])); ?>"><?php echo ucfirst($pg['statusPengiriman']); ?></span></td>
-                        <td class="action-cell">
-                            <button class="btn-action btn-edit" onclick="openEditPengirimanModal('<?php echo htmlspecialchars($pg['noPengiriman']); ?>', '<?php echo htmlspecialchars($pg['noSuratJalan']); ?>', '<?php echo htmlspecialchars($pg['tanggalKirim']); ?>', '<?php echo htmlspecialchars(str_replace("'", "\\'", $pg['alamatPengiriman'])); ?>', '<?php echo htmlspecialchars($pg['statusPengiriman']); ?>', '<?php echo htmlspecialchars($pg['noPesanan']); ?>')">Edit</button>
-                            <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) window.location.href='index.php?page=pengiriman&hapus=<?php echo htmlspecialchars($pg['noPengiriman']); ?>'">Hapus</button>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
-</div>
-
 <!-- Status Summary -->
 <div class="status-summary">
     <div class="summary-card">
@@ -229,29 +205,72 @@ if (isset($_SESSION['error_message'])) {
     </div>
 </div>
 
+<div class="table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th style="width: 15%;">No Pengiriman</th>
+                <th style="width: 15%;">No Surat Jalan</th>
+                <th style="width: 15%;">Tanggal Kirim</th>
+                <th style="width: 25%;">Alamat Pengiriman</th>
+                <th style="width: 15%;">Status</th>
+                <th style="width: 30%;">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($pengiriman_list)): ?>
+                <tr><td colspan="6" style="text-align:center;color:#999;">Belum ada pengiriman</td></tr>
+            <?php else: ?>
+                <?php foreach ($pengiriman_list as $pg): ?>
+                    <tr>
+                        <td><strong><?php echo htmlspecialchars($pg['noPengiriman']); ?></strong></td>
+                        <td><?php echo htmlspecialchars($pg['noSuratJalan']); ?></td>
+                        <td><?php echo date('d M Y', strtotime($pg['tanggalKirim'])); ?></td>
+                        <td><?php echo htmlspecialchars($pg['alamatPengiriman']); ?></td>
+                        <td><span class="badge badge-<?php echo strtolower(str_replace(' ', '', $pg['statusPengiriman'])); ?>"><?php echo ucfirst($pg['statusPengiriman']); ?></span></td>
+                        <td class="action-cell">
+                            <button class="btn-action btn-edit" onclick="openEditPengirimanModal('<?php echo htmlspecialchars($pg['noPengiriman']); ?>', '<?php echo htmlspecialchars($pg['noSuratJalan']); ?>', '<?php echo htmlspecialchars($pg['tanggalKirim']); ?>', '<?php echo htmlspecialchars(str_replace("'", "\\\"", $pg['alamatPengiriman'])); ?>', '<?php echo htmlspecialchars($pg['statusPengiriman']); ?>', '<?php echo htmlspecialchars($pg['noPesanan']); ?>', '<?php echo htmlspecialchars($pg['idDriver'] ?? ''); ?>')">Edit</button>
+                            <button class="btn-action btn-delete" onclick="if(confirm('Hapus pengiriman ini?')) window.location.href='index.php?page=pengiriman&hapus=<?php echo htmlspecialchars($pg['noPengiriman']); ?>'">Hapus</button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
 <script>
 window.ordersData = <?php echo json_encode($orders); ?>;
+window.driversData = <?php echo json_encode($drivers); ?>;
 
 function openAddPengirimanModal() {
     openModal('Buat Pengiriman Baru', 'pengirimanForm');
-    document.getElementById('dynamicForm').reset();
     
-    let idField = document.getElementById('noPengirimanHidden');
-    if (idField) idField.remove();
+    setTimeout(() => {
+        const form = document.getElementById('dynamicForm');
+        if (form) form.reset();
+        
+        let idField = document.getElementById('noPengirimanHidden');
+        if (idField) idField.remove();
+        
+        updateOrderSelect();
+        updateDriverSelect();
+    }, 120);
     
-    updateOrderSelect();
-    
-    document.getElementById('dynamicForm').onsubmit = function(e) {
-        e.preventDefault();
-        submitPengirimanForm('tambah');
-    };
+    setTimeout(() => {
+        document.getElementById('dynamicForm').onsubmit = function(e) {
+            e.preventDefault();
+            submitPengirimanForm('tambah');
+        };
+    }, 130);
 }
 
-function openEditPengirimanModal(noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan) {
+function openEditPengirimanModal(noPengiriman, noSuratJalan, tanggalKirim, alamatPengiriman, statusPengiriman, noPesanan, idDriver) {
     openModal('Edit Pengiriman', 'pengirimanForm');
     
     setTimeout(() => {
         updateOrderSelect(noPesanan);
+        updateDriverSelect(idDriver);
         document.getElementById('noSuratJalan').value = noSuratJalan;
         document.getElementById('tanggalKirim').value = tanggalKirim;
         document.getElementById('alamatPengiriman').value = alamatPengiriman;
@@ -283,6 +302,31 @@ function updateOrderSelect(selectedId = null) {
     select.innerHTML = '<option value="">Pilih Order</option>';
     window.ordersData.forEach(o => {
         select.innerHTML += `<option value="${o.noPesanan}">${o.noPesanan} - ${o.namaDistributor}</option>`;
+    });
+    if (selectedId) select.value = selectedId;
+}
+
+function updateDriverSelect(selectedId = null) {
+    const select = document.getElementById('idDriver');
+    if (!select) return;
+
+    // Default option
+    select.innerHTML = '<option value="">Pilih Driver</option>';
+
+    // If no driver data available, show disabled placeholder and disable select
+    if (!window.driversData || !Array.isArray(window.driversData) || window.driversData.length === 0) {
+        select.innerHTML = '<option value="" disabled selected>Data driver belum tersedia</option>';
+        select.disabled = true;
+        return;
+    }
+
+    // Populate drivers and enable select
+    select.disabled = false;
+    window.driversData.forEach(d => {
+        const option = document.createElement('option');
+        option.value = d.idUser;
+        option.textContent = d.nama + ' (' + d.email + ')';
+        select.appendChild(option);
     });
     if (selectedId) select.value = selectedId;
 }

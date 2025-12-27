@@ -51,24 +51,27 @@ $revenue_row = $revenue_stmt->get_result()->fetch_assoc();
 $total_revenue = $revenue_row['total'] ?? 0;
 $revenue_stmt->close();
 
-// Get pengiriman status breakdown
-$status_query = "SELECT statusPengiriman, COUNT(*) as count FROM pengiriman 
-                WHERE idUser = ? GROUP BY statusPengiriman";
-$status_stmt = $koneksi->prepare($status_query);
-$status_stmt->bind_param('s', $current_user_id);
-$status_stmt->execute();
-$status_results = $status_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$status_stmt->close();
+// Get top selling products
+$product_query = "SELECT pr.namaProduk, SUM(dp.jumlah) as total_qty, SUM(dp.totalHarga) as total_revenue
+                 FROM detail_pesanan dp 
+                 JOIN produk pr ON dp.idProduk = pr.idProduk
+                 JOIN pesanan p ON dp.noPesanan = p.noPesanan
+                 WHERE p.idUser = ?
+                 GROUP BY pr.namaProduk
+                 ORDER BY total_revenue DESC LIMIT 5";
+$product_stmt = $koneksi->prepare($product_query);
+$product_stmt->bind_param('s', $current_user_id);
+$product_stmt->execute();
+$top_products = $product_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$product_stmt->close();
 
-$status_counts = ['Selesai' => 0, 'Dikirim' => 0, 'Pending' => 0];
-foreach ($status_results as $sr) {
-    $key = ucfirst($sr['statusPengiriman']);
-    if (isset($status_counts[$key])) {
-        $status_counts[$key] = $sr['count'];
+// Find max revenue for progress bar
+$max_product_revenue = 0;
+foreach ($top_products as $tp) {
+    if ($tp['total_revenue'] > $max_product_revenue) {
+        $max_product_revenue = $tp['total_revenue'];
     }
 }
-
-$total_pengiriman = array_sum($status_counts);
 
 // Get recent orders
 $recent_query = "SELECT p.noPesanan, p.tanggalOrder, d.namaDistributor, p.status 
@@ -129,27 +132,32 @@ $recent_stmt->close();
     </div>
 </div>
 
-<!-- Charts Section -->
+<!-- Grafik Penjualan -->
 <div class="dashboard-charts">
     <div class="chart-card">
-        <h3>Status Pengiriman</h3>
-        <div class="status-breakdown">
-            <?php
-            $delivery_labels = ['Selesai' => '✓', 'Dikirim' => '→', 'Pending' => '⏳'];
-            $delivery_colors = ['Selesai' => '#27ae60', 'Dikirim' => '#f39c12', 'Pending' => '#e74c3c'];
-            
-            foreach (['Selesai', 'Dikirim', 'Pending'] as $status):
-                $count = $status_counts[$status] ?? 0;
-                $percentage = $total_pengiriman > 0 ? ($count / $total_pengiriman) * 100 : 0;
-            ?>
-                <div class="status-item">
-                    <span class="status-label"><?php echo $status; ?></span>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: <?php echo $percentage; ?>%; background: <?php echo $delivery_colors[$status]; ?>;"></div>
-                    </div>
-                    <span class="status-count"><?php echo $count; ?> pengiriman</span>
-                </div>
-            <?php endforeach; ?>
+        <h3>Grafik Penjualan - Produk Terlaris</h3>
+        <div class="sales-chart">
+            <?php if (empty($top_products)): ?>
+                <p style="text-align: center; color: #999; padding: 20px;">Belum ada data penjualan</p>
+            <?php else: ?>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <?php foreach ($top_products as $product): 
+                        $progress = $max_product_revenue > 0 ? ($product['total_revenue'] / $max_product_revenue) * 100 : 0;
+                    ?>
+                    <tr style="border-bottom: 1px solid #eee; padding: 10px 0;">
+                        <td style="padding: 10px; width: 30%;"><strong><?php echo htmlspecialchars($product['namaProduk']); ?></strong></td>
+                        <td style="padding: 10px; width: 50%;">
+                            <div style="background: #f0f0f0; border-radius: 4px; overflow: hidden; height: 30px;">
+                                <div style="background: linear-gradient(90deg, #4a90e2, #357abd); height: 100%; width: <?php echo $progress; ?>%; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; color: white; font-size: 12px;">
+                                    <?php echo round($progress, 0); ?>%
+                                </div>
+                            </div>
+                        </td>
+                        <td style="padding: 10px; text-align: right; width: 20%;"><strong>Rp <?php echo number_format($product['total_revenue'], 0, ',', '.'); ?></strong></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+            <?php endif; ?>
         </div>
     </div>
 </div>
