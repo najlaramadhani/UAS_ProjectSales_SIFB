@@ -117,8 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     
                     if (empty($idProduk) || $jumlah <= 0) continue;
                     
-                    // Ambil harga dari database produk
-                    $price_query = "SELECT harga FROM produk WHERE idProduk = ?";
+                    // Ambil harga dan stok dari database produk
+                    $price_query = "SELECT harga, stok FROM produk WHERE idProduk = ?";
                     $price_stmt = $koneksi->prepare($price_query);
                     if (!$price_stmt) throw new Exception("Prepare failed: " . $koneksi->error);
                     
@@ -133,7 +133,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     
                     $price_row = $price_res->fetch_assoc();
                     $hargaSatuan = floatval($price_row['harga']);
+                    $stok_available = intval($price_row['stok']);
                     $price_stmt->close();
+                    
+                    // Validasi stok tersedia
+                    if ($stok_available < $jumlah) {
+                        throw new Exception("Stok tidak mencukupi untuk produk $idProduk. Stok tersedia: $stok_available, diminta: $jumlah");
+                    }
 
                     $totalHarga = $hargaSatuan * $jumlah;
 
@@ -146,6 +152,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $insert_detail_stmt->bind_param('sssidd', $idDetail, $noPesanan, $idProduk, $jumlah, $hargaSatuan, $totalHarga);
                     if (!$insert_detail_stmt->execute()) throw new Exception("Insert detail failed: " . $insert_detail_stmt->error);
                     $insert_detail_stmt->close();
+                    
+                    // ========================================
+                    // REDUCE STOCK AUTOMATICALLY
+                    // ========================================
+                    $update_stock_query = "UPDATE produk SET stok = stok - ? WHERE idProduk = ?";
+                    $update_stock_stmt = $koneksi->prepare($update_stock_query);
+                    if (!$update_stock_stmt) throw new Exception("Prepare stock update failed: " . $koneksi->error);
+                    
+                    $update_stock_stmt->bind_param('is', $jumlah, $idProduk);
+                    if (!$update_stock_stmt->execute()) throw new Exception("Stock update failed: " . $update_stock_stmt->error);
+                    $update_stock_stmt->close();
                     
                     $detail_seq++;
                 }
@@ -354,6 +371,9 @@ if (isset($_SESSION['error_message'])) {
                             <button class="btn-action btn-view" onclick="openOrderDetailModal('<?php echo htmlspecialchars($order['noPesanan']); ?>')">Detail</button>
                             <button class="btn-action btn-edit" onclick="openEditOrderModal('<?php echo htmlspecialchars($order['noPesanan']); ?>', '<?php echo htmlspecialchars($order['tanggalOrder']); ?>', '<?php echo htmlspecialchars($order['noDistributor']); ?>', '<?php echo htmlspecialchars($order['status']); ?>')">Edit</button>
                             <button class="btn-action btn-delete" onclick="if(confirm('Hapus order ini?')) window.location.href='index.php?page=order&hapus=<?php echo htmlspecialchars($order['noPesanan']); ?>'">Hapus</button>
+                            <?php if (strtolower($order['status']) === 'selesai'): ?>
+                            <button class="btn-action btn-print" onclick="window.open('pages/invoice.php?noPesanan=<?php echo htmlspecialchars($order['noPesanan']); ?>', '_blank')" title="Cetak Invoice">📄 Invoice</button>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>

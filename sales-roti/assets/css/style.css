@@ -461,6 +461,15 @@ body {
     color: var(--primary-color);
 }
 
+.btn-success {
+    background-color: #27ae60;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #229954;
+}
+
 .btn-lg {
     padding: 0.75rem 1.5rem;
     font-size: 1rem;
@@ -499,6 +508,15 @@ body {
 
 .btn-delete:hover {
     background-color: #fadbd8;
+}
+
+.btn-print {
+    color: #2196F3;
+    border-color: #2196F3;
+}
+
+.btn-print:hover {
+    background-color: #e3f2fd;
 }
 
 /* ==================== CARDS ==================== */
