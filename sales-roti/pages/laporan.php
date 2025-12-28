@@ -119,6 +119,79 @@ foreach ($top_distributors as $td) {
         $max_revenue = $td['revenue'];
     }
 }
+
+// Daily Sales Chart Data
+$chart_start_date = date('Y-m-01', mktime(0, 0, 0, $bulan, 1, $tahun));
+$chart_end_date = date('Y-m-t', mktime(0, 0, 0, $bulan, 1, $tahun));
+
+if ($user_role === 'admin') {
+    $chart_query = "SELECT DATE(p.tanggalOrder) as tanggal, SUM(dp.totalHarga) as daily_revenue, COUNT(p.noPesanan) as daily_orders
+                   FROM pesanan p 
+                   LEFT JOIN detail_pesanan dp ON p.noPesanan = dp.noPesanan 
+                   WHERE DATE(p.tanggalOrder) BETWEEN ? AND ?
+                   GROUP BY DATE(p.tanggalOrder)
+                   ORDER BY tanggal ASC";
+    $chart_stmt = $koneksi->prepare($chart_query);
+    $chart_stmt->bind_param('ss', $chart_start_date, $chart_end_date);
+} else {
+    $chart_query = "SELECT DATE(p.tanggalOrder) as tanggal, SUM(dp.totalHarga) as daily_revenue, COUNT(p.noPesanan) as daily_orders
+                   FROM pesanan p 
+                   LEFT JOIN detail_pesanan dp ON p.noPesanan = dp.noPesanan 
+                   WHERE p.idUser = ? AND DATE(p.tanggalOrder) BETWEEN ? AND ?
+                   GROUP BY DATE(p.tanggalOrder)
+                   ORDER BY tanggal ASC";
+    $chart_stmt = $koneksi->prepare($chart_query);
+    $chart_stmt->bind_param('sss', $current_user_id, $chart_start_date, $chart_end_date);
+}
+$chart_stmt->execute();
+$chart_data_result = $chart_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$chart_stmt->close();
+
+// Format chart data for Chart.js
+$chart_labels = [];
+$chart_revenue = [];
+$chart_orders = [];
+
+// Create all days in month with 0 values
+$days_in_month = date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
+for ($d = 1; $d <= $days_in_month; $d++) {
+    $chart_labels[] = $d;
+    $chart_revenue[] = 0;
+    $chart_orders[] = 0;
+}
+
+// Fill with actual data
+foreach ($chart_data_result as $row) {
+    $day = intval(date('d', strtotime($row['tanggal'])));
+    $chart_revenue[$day - 1] = floatval($row['daily_revenue'] ?? 0);
+    $chart_orders[$day - 1] = intval($row['daily_orders'] ?? 0);
+}
+
+// Handle export request
+if (isset($_GET['export']) && $_GET['export'] === 'excel') {
+    header('Content-Type: application/vnd.ms-excel');
+    header('Content-Disposition: attachment; filename="Laporan_Penjualan_' . date('Y-m-d_H-i-s') . '.xls"');
+    
+    echo "LAPORAN PENJUALAN\n";
+    echo "Bulan/Tahun: " . date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun)) . "\n";
+    echo "Tanggal Export: " . date('d-m-Y H:i:s') . "\n";
+    echo "\n\n";
+    
+    echo "RINGKASAN\n";
+    echo "Total Revenue\tRp " . number_format($total_revenue, 0, ',', '.') . "\n";
+    echo "Total Order\t" . $order_total . "\n";
+    echo "Total Pengiriman\t" . $delivery_total . "\n";
+    echo "Distributor Aktif\t" . $distributor_total . "\n";
+    echo "\n\n";
+    
+    echo "TOP DISTRIBUTOR PENJUALAN\n";
+    echo "Rank\tNama Distributor\tTotal Order\tTotal Revenue\n";
+    foreach ($top_distributors as $index => $td) {
+        echo ($index + 1) . "\t" . htmlspecialchars($td['namaDistributor']) . "\t" . $td['order_count'] . "\tRp " . number_format($td['revenue'] ?? 0, 0, ',', '.') . "\n";
+    }
+    
+    exit;
+}
 ?>
 
 <div class="page-header">
@@ -147,6 +220,7 @@ foreach ($top_distributors as $td) {
             </select>
             <button class="btn btn-secondary" onclick="applyFilter()">Filter</button>
             <button class="btn btn-outline" onclick="resetFilter()">Reset</button>
+            <button class="btn btn-success" onclick="exportToExcel()" title="Export to Excel">📥 Export Excel</button>
         </div>
     </div>
 </div>
@@ -187,6 +261,14 @@ foreach ($top_distributors as $td) {
             <p class="summary-value"><?php echo $distributor_total; ?> distributor</p>
             <p class="summary-change"><?php echo date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun)); ?></p>
         </div>
+    </div>
+</div>
+
+<!-- Sales Chart -->
+<div class="report-section">
+    <h3>📊 Grafik Penjualan - <?php echo date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun)); ?></h3>
+    <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
+        <canvas id="salesChart" style="max-height: 400px;"></canvas>
     </div>
 </div>
 
@@ -232,7 +314,115 @@ foreach ($top_distributors as $td) {
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 <script>
+// Chart Data
+const chartLabels = [<?php echo implode(',', $chart_labels); ?>];
+const chartRevenueData = [<?php echo implode(',', $chart_revenue); ?>];
+const chartOrdersData = [<?php echo implode(',', $chart_orders); ?>];
+
+// Initialize Chart
+const ctx = document.getElementById('salesChart');
+if (ctx) {
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartLabels,
+            datasets: [
+                {
+                    label: 'Revenue (Rp)',
+                    data: chartRevenueData,
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Orders',
+                    data: chartOrdersData,
+                    borderColor: '#2196F3',
+                    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Revenue (Rp)',
+                        color: '#4CAF50',
+                        font: { weight: 'bold' }
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return 'Rp ' + new Intl.NumberFormat('id-ID', {
+                                maximumFractionDigits: 0
+                            }).format(value);
+                        }
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Jumlah Order',
+                        color: '#2196F3',
+                        font: { weight: 'bold' }
+                    },
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        font: { size: 12 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.dataset.yAxisID === 'y') {
+                                label += 'Rp ' + new Intl.NumberFormat('id-ID', {
+                                    maximumFractionDigits: 0
+                                }).format(context.parsed.y);
+                            } else {
+                                label += context.parsed.y + ' pesanan';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 function applyFilter() {
     const bulan = document.getElementById('bulanFilter').value;
     const tahun = document.getElementById('tahunFilter').value;
@@ -241,5 +431,11 @@ function applyFilter() {
 
 function resetFilter() {
     window.location.href = 'index.php?page=laporan';
+}
+
+function exportToExcel() {
+    const bulan = document.getElementById('bulanFilter').value;
+    const tahun = document.getElementById('tahunFilter').value;
+    window.location.href = `index.php?page=laporan&bulan=${bulan}&tahun=${tahun}&export=excel`;
 }
 </script>
